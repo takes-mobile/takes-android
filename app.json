@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "@privy-io/expo-starter",
-    "slug": "expo-starter",
+    "name": "letsbet.fun",
+    "slug": "letsbet",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -16,7 +16,7 @@
       "usesAppleSignIn": true,
       "supportsTablet": true,
       "bundleIdentifier": "dev.privy.example",
-      "associatedDomains": ["webcredentials:<your-associated-domain>"],
+      "associatedDomains": ["webcredentials:your.real.domain.com"],
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -31,9 +31,9 @@
       "package": "dev.privy.example"
     },
     "extra": {
-      "privyAppId": "<your-privy-app-id>",
-      "privyClientId": "<your-privy-app-client-id>",
-      "passkeyAssociatedDomain": "https://<your-associated-domain>"
+      "privyAppId": "cmdfmgl76001qlh0mi0ggzx5l",
+      "privyClientId": "client-WY6NvgKMnByoyauWRNvgPku7dBs3VtJeYxseJm48kDUtk",
+      "passkeyAssociatedDomain": "https://your.real.domain.com"
     },
     "plugins": [
       "expo-router",
