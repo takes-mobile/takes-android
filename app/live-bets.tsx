@@ -19,7 +19,7 @@ export default function LiveBetsScreen() {
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background, paddingBottom: 90 }}>
-      <Text style={{ fontSize: 28, fontWeight: 'bold', color: theme.text }}>Live Bets</Text>
+      <Text style={{ fontSize: 28, fontWeight: 'bold', color: "green" }}>Live Bets</Text>
     </View>
   );
 } 

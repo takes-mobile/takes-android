@@ -104,6 +104,8 @@ function LayoutWithNav() {
             color: theme.text,
           },
           headerShadowVisible: false,
+          animation: 'fade',
+          animationDuration: 50,
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />

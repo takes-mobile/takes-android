@@ -1,8 +1,8 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert, Animated, Modal, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { ThemeContext } from './_layout';
 
 export default function CreateBetScreen() {
@@ -179,7 +179,7 @@ export default function CreateBetScreen() {
             fontWeight: 'bold', 
             color: theme.green, 
           }}>
-            /create-bet
+            whats ur take?
           </Text>
           
           {/* Notification Icon */}
@@ -233,9 +233,9 @@ export default function CreateBetScreen() {
 
       {/* Main Question Input */}
       <View style={{ marginBottom: 24, marginTop: 24 }}>
-        <Text style={{ fontSize: 21, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
+        {/* <Text style={{ fontSize: 21, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
           What's your burning opinion?
-        </Text>
+        </Text> */}
         <TextInput 
           placeholder="e.g., Will Apple stock go up today?" 
           value={description} 

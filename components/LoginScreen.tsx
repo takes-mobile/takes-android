@@ -68,159 +68,87 @@ const FloatingElement = ({ delay, duration, startX, startY, endX, endY, children
 
 // Sample Bet Preview Component
 const SampleBetPreview = ({ theme }: { theme: any }) => {
-  const slideAnim = useRef(new Animated.Value(screenWidth)).current;
-
-  useEffect(() => {
-    const animate = () => {
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: -200,
-          duration: 8000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: screenWidth,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(animate);
-    };
-    animate();
-  }, []);
-
   return (
-    <Animated.View
+    <View
       style={{
         position: 'absolute',
         bottom: 100,
-        transform: [{ translateX: slideAnim }],
-        opacity: 0.3,
+        right: 20,
+        opacity: 0.2,
       }}
     >
       <View style={{
-        backgroundColor: 'rgba(34,197,94,0.1)',
-        borderRadius: 16,
-        padding: 16,
-        width: 200,
+        backgroundColor: theme.card,
+        borderRadius: 12,
+        padding: 12,
+        width: 160,
         borderWidth: 1,
-        borderColor: 'rgba(34,197,94,0.2)',
+        borderColor: theme.border,
       }}>
-        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
+        <Text style={{ color: theme.text, fontSize: 13, fontWeight: '500' }}>
           "Who would win gorilla vs. 100 men?"
         </Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Yes: 65%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>No: 35%</Text>
-        </View>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
 // Top Sample Bet Preview Component
 const TopSampleBetPreview = ({ theme }: { theme: any }) => {
-  const slideAnim = useRef(new Animated.Value(-200)).current;
-
-  useEffect(() => {
-    const animate = () => {
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: screenWidth,
-          duration: 8000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: -200,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(animate);
-    };
-    animate();
-  }, []);
-
   return (
-    <Animated.View
+    <View
       style={{
         position: 'absolute',
         top: 100,
-        transform: [{ translateX: slideAnim }],
-        opacity: 0.3,
+        left: 20,
+        opacity: 0.2,
       }}
     >
       <View style={{
-        backgroundColor: 'rgba(139,92,246,0.1)',
-        borderRadius: 16,
-        padding: 16,
-        width: 200,
+        backgroundColor: theme.card,
+        borderRadius: 12,
+        padding: 12,
+        width: 160,
         borderWidth: 1,
-        borderColor: 'rgba(139,92,246,0.2)',
+        borderColor: theme.border,
       }}>
-        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
+        <Text style={{ color: theme.text, fontSize: 13, fontWeight: '500' }}>
           "Who will win the Super Bowl?"
         </Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team A: 45%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team B: 55%</Text>
-        </View>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
 // Middle Sample Bet Preview Component
 const MiddleSampleBetPreview = ({ theme }: { theme: any }) => {
-  const slideAnim = useRef(new Animated.Value(screenWidth)).current;
-
-  useEffect(() => {
-    const animate = () => {
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: -200,
-          duration: 10000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: screenWidth,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(animate);
-    };
-    animate();
-  }, []);
-
   return (
-    <Animated.View
+    <View
       style={{
         position: 'absolute',
         top: screenHeight / 2 - 50,
-        transform: [{ translateX: slideAnim }],
-        opacity: 0.25,
+        right: 40,
+        opacity: 0.15,
       }}
     >
       <View style={{
-        backgroundColor: 'rgba(34,197,94,0.1)',
-        borderRadius: 16,
-        padding: 16,
-        width: 180,
+        backgroundColor: theme.card,
+        borderRadius: 12,
+        padding: 12,
+        width: 140,
         borderWidth: 1,
-        borderColor: 'rgba(34,197,94,0.2)',
+        borderColor: theme.border,
       }}>
-        <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
+        <Text style={{ color: theme.text, fontSize: 12, fontWeight: '500' }}>
           "Will Apple stock go up today?"
         </Text>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>Yes: 72%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>No: 28%</Text>
-        </View>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
 // ShinyGlow component for the X button, with yellow glowing border
-const ShinyGlow = () => {
+const ShinyGlow = ({ theme }: { theme: string }) => {
   const shineAnim = useRef(new Animated.Value(-1)).current;
   const borderAnim = useRef(new Animated.Value(0)).current;
 
@@ -313,11 +241,11 @@ const ShinyGlow = () => {
         }}
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,180,0.55)', 'rgba(255,255,255,0)']}
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.3)', 'rgba(255,255,255,0)']}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={{
-            width: 80,
+            width: 60,
             height: '200%',
             borderRadius: 24,
           }}
@@ -325,7 +253,7 @@ const ShinyGlow = () => {
       </Animated.View>
       {/* Outer subtle glow */}
       <LinearGradient
-        colors={['rgba(255,255,180,0.18)', 'rgba(255,255,180,0.05)', 'rgba(255,255,180,0)']}
+        colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)', 'rgba(255,255,255,0)']}
         style={{
           ...StyleSheet.absoluteFillObject,
           borderRadius: 16,
@@ -425,13 +353,17 @@ export default function LoginScreen() {
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Background Gradient */}
       <LinearGradient
-        colors={themeName === 'dark' ? ['#18181b', '#232323', '#333'] : ['#f6f8fa', '#fff', '#f1f5f9']}
+        colors={themeName === 'dark' 
+          ? ['#0a0a0a', '#1a1a1a', '#2a2a2a', '#1a1a1a'] 
+          : ['#f0f9ff', '#e0f2fe', '#bae6fd', '#7dd3fc']
+        }
         style={{
           position: 'absolute',
           left: 0,
           right: 0,
           top: 0,
           bottom: 0,
+          zIndex: -1,
         }}
       />
 
@@ -457,44 +389,29 @@ export default function LoginScreen() {
       >
         {/* Logo and Tagline */}
         <View style={{ alignItems: 'center', marginBottom: 60 }}>
-          {themeName === 'dark' ? (
-           <>
-           <Image 
-              source={require('../assets/images/logo.png')}
+          <View style={{
+            shadowColor: themeName === 'dark' ? 'rgba(255, 255, 0, 0.5)' : '#22c55e',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: themeName === 'dark' ? 0.6 : 0.8,
+            shadowRadius: 25,
+            elevation: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 20,
+            overflow: 'hidden',
+          }}>
+           
+            <Image 
+              source={require('../assets/images/image.png')}
               style={{
-                width: 650,
-                height: 255,
+                width: 400,
+                height: 150,
                 resizeMode: 'contain',
                 marginBottom: 2,
+                transform: [{ rotate: '0deg' }],
               }}
             />
-            <Text>
-              app
-            </Text>
-           </>
-           
-            
-          ) : (
-            <Text style={{ 
-              fontSize: 36, 
-              fontWeight: 'bold', 
-              color: theme.text, 
-              marginBottom: 2,
-              letterSpacing: 1,
-            }}>
-              lets
-              <Text
-                style={{
-                  color: '#22c55e',
-                  fontWeight: 'bold',
-                }}
-              >
-                bet
-              </Text>
-              .fun
-            </Text>
-            
-          )}
+          </View>
         
           <Text style={{ 
             fontSize: 20, 
@@ -504,17 +421,16 @@ export default function LoginScreen() {
             fontWeight: '400',
             letterSpacing: 1.2,
             
-            fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
+            fontFamily: Platform.OS === 'ios' ? 'AvenirNext-Bold' : 'sans-serif-medium',
           }}>
 
-            your opinions are worth something
+            your takes are worth something
           </Text>
         </View>
 
         {/* Sign In Button */}
         <TouchableOpacity
           style={{
-            backgroundColor: theme.green,
             borderRadius: 16,
             paddingVertical: 18,
             paddingHorizontal: 48,
@@ -525,16 +441,31 @@ export default function LoginScreen() {
             shadowOpacity: 0.3,
             shadowRadius: 16,
             elevation: 12,
+            overflow: 'hidden',
           }}
           onPress={openModal}
+          activeOpacity={0.85}
         >
+          {/* Two-color gradient background */}
+          <LinearGradient
+            colors={['#02c94b', '#8bc916']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              ...StyleSheet.absoluteFillObject,
+              borderRadius: 16,
+              opacity: 0.95,
+            }}
+          />
           <Text style={{ 
-            color: '#FFFFFF', 
-            fontWeight: 'bold', 
+            color: '#000', // dark green
+            fontWeight: '600', 
             fontSize: 18,
-            letterSpacing: 0.5,
+            letterSpacing: 1.5,
+            textAlign: 'center',
+            fontFamily: Platform.OS === 'ios' ? 'AvenirNext-Bold' : 'sans-serif-medium',
           }}>
-            Sign In
+            what's your take?
           </Text>
         </TouchableOpacity>
 
@@ -626,7 +557,7 @@ export default function LoginScreen() {
           {/* Login Options */}
           <View style={{ gap: 16 }}>
             {/* X (Twitter) Button with Shiny Glow and Yellow Border */}
-            <View style={{ position: 'relative' }}>
+            <View style={{ position: 'relative', overflow: 'hidden' }}>
               <TouchableOpacity
                 style={{
                   backgroundColor: '#000000',
@@ -641,7 +572,7 @@ export default function LoginScreen() {
                   shadowOpacity: 0.3,
                   shadowRadius: 8,
                   elevation: 8,
-                  overflow: 'visible',
+                  overflow: 'hidden',
                 }}
                 onPress={() => {
                   closeModal();
@@ -658,7 +589,7 @@ export default function LoginScreen() {
                   Continue with X
                 </Text>
                 {/* The shiny glow and yellow border overlay */}
-                <ShinyGlow />
+                <ShinyGlow theme={themeName} />
               </TouchableOpacity>
             </View>
 
