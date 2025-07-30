@@ -249,46 +249,46 @@ export default function PreviewBetScreen() {
       for (let i = 0; i < Math.min(answersArr.length, 2); i++) {
         // Generate keypair for each token
         console.log(`Generating keypair for option ${i + 1}...`);
-        const keypairResponse = await fetch('https://apipoolc.vercel.app/api/keypair');
-        
-        if (!keypairResponse.ok) {
+      const keypairResponse = await fetch('https://apipoolc.vercel.app/api/keypair');
+      
+      if (!keypairResponse.ok) {
           throw new Error(`Keypair generation failed for option ${i + 1}: ${keypairResponse.status}`);
-        }
+      }
 
-        const keypairData = await keypairResponse.json();
-        
-        if (!keypairData.success || !keypairData.publicKey) {
+      const keypairData = await keypairResponse.json();
+      
+      if (!keypairData.success || !keypairData.publicKey) {
           throw new Error(`Failed to generate keypair for option ${i + 1}`);
-        }
+      }
 
         console.log(`Keypair generated for option ${i + 1}:`, keypairData.publicKey);
 
         // Prepare API parameters for this token
         const tokenName = createTokenName(i);
         const tokenSymbol = createTokenSymbol(i);
-        const mint = keypairData.publicKey;
+      const mint = keypairData.publicKey;
 
         console.log(`Creating token ${i + 1} with params:`, {
-          tokenName,
-          tokenSymbol,
-          mint,
-          userWallet
-        });
+        tokenName,
+        tokenSymbol,
+        mint,
+        userWallet
+      });
 
         // Call the create API for this token
-        const createResponse = await fetch(
-          `https://apipoolc.vercel.app/api/create?tokenName=${encodeURIComponent(tokenName)}&tokenSymbol=${encodeURIComponent(tokenSymbol)}&mint=${mint}&userWallet=${userWallet}`
-        );
+      const createResponse = await fetch(
+        `https://apipoolc.vercel.app/api/create?tokenName=${encodeURIComponent(tokenName)}&tokenSymbol=${encodeURIComponent(tokenSymbol)}&mint=${mint}&userWallet=${userWallet}`
+      );
 
-        if (!createResponse.ok) {
+      if (!createResponse.ok) {
           throw new Error(`API call failed for token ${i + 1}: ${createResponse.status}`);
-        }
+      }
 
-        const createData = await createResponse.json();
-        
-        if (!createData.success || !createData.poolTx) {
+      const createData = await createResponse.json();
+      
+      if (!createData.success || !createData.poolTx) {
           throw new Error(`Failed to create token pool for option ${i + 1}`);
-        }
+      }
 
         console.log(`Pool created successfully for option ${i + 1}:`, createData);
 
@@ -319,44 +319,44 @@ export default function PreviewBetScreen() {
 
         // Get a fresh blockhash and update the transaction
         console.log('Getting fresh blockhash...');
-        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-        transaction.recentBlockhash = blockhash;
-        transaction.lastValidBlockHeight = lastValidBlockHeight;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
 
-        console.log('Signing transaction...');
+      console.log('Signing transaction...');
 
         // First, sign with the keypair (mint authority)
         const keyPair = Keypair.fromSecretKey(new Uint8Array(token.keypair.secretKey));
-        
-        // Sign with keypair first
-        transaction.sign(keyPair);
+      
+      // Sign with keypair first
+      transaction.sign(keyPair);
 
         console.log(`Transaction signed with keypair for ${token.tokenName}`);
 
         // Then sign with user's wallet using Privy
-        const { signedTransaction } = await provider.request({
-          method: 'signTransaction',
-          params: {
-            transaction: transaction
-          },
-        });
+      const { signedTransaction } = await provider.request({
+        method: 'signTransaction',
+        params: {
+          transaction: transaction
+        },
+      });
 
         console.log(`Transaction signed for ${token.tokenName}`);
 
         // Send the signed transaction
-        const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed'
-        });
+      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed'
+      });
 
         // Wait for confirmation
-        console.log('Waiting for transaction confirmation...');
-        await connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight
-        }, 'confirmed');
-        
+      console.log('Waiting for transaction confirmation...');
+      await connection.confirmTransaction({
+        signature,
+        blockhash,
+        lastValidBlockHeight
+      }, 'confirmed');
+      
         console.log(`Transaction confirmed for ${token.tokenName}:`, signature);
         signatures.push(signature);
       }

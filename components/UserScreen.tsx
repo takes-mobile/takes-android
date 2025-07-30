@@ -37,6 +37,131 @@ const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
   return x.type;
 };
 
+// BetCard component for user's bets
+const BetCard = ({ bet, userWallet, theme }: { bet: any; userWallet: string | undefined; theme: any }) => {
+  const router = useRouter();
+  
+  const formatTimeLeft = (endTime: string) => {
+    const end = new Date(endTime);
+    const now = new Date();
+    const diff = end.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Ended';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}m`;
+  };
+
+  // Find user's participation in this bet
+  const userParticipation = bet.participants?.find((p: any) => p.wallet === userWallet);
+  const userOption = userParticipation ? bet.options[userParticipation.optionIndex] : null;
+  const userBetAmount = userParticipation ? userParticipation.amount : 0;
+
+  const isExpired = new Date(bet.endTime) <= new Date();
+
+  return (
+    <TouchableOpacity
+      style={{
+        backgroundColor: theme.card,
+        borderRadius: 16,
+        padding: 18,
+        marginHorizontal: 18,
+        marginBottom: 16,
+        borderWidth: 2,
+        borderColor: theme.border,
+        shadowColor: theme.shadow,
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 3,
+      }}
+      onPress={() => {
+        router.push({
+          pathname: '/bet-details',
+          params: { betData: JSON.stringify(bet) }
+        });
+      }}
+    >
+      {/* Question */}
+      <Text style={{
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: theme.text,
+        marginBottom: 12,
+        lineHeight: 22,
+      }}>
+        {bet.question}
+      </Text>
+
+      {/* User's bet info */}
+      <View style={{
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: theme.green + '40',
+      }}>
+        <Text style={{
+          fontSize: 14,
+          color: theme.green,
+          fontWeight: '600',
+          marginBottom: 4,
+        }}>
+          Your Bet: {userOption}
+        </Text>
+        <Text style={{
+          fontSize: 16,
+          color: theme.text,
+          fontWeight: 'bold',
+        }}>
+          Amount: {userBetAmount} SOL
+        </Text>
+      </View>
+
+      {/* Status and stats */}
+      <View style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: bet.isActive && !isExpired ? theme.green : '#ef4444',
+            marginRight: 6,
+          }} />
+          <Text style={{
+            fontSize: 12,
+            color: bet.isActive && !isExpired ? theme.green : '#ef4444',
+            fontWeight: '600',
+          }}>
+            {bet.isActive && !isExpired ? 'Active' : 'Ended'}
+          </Text>
+        </View>
+        
+        <Text style={{
+          fontSize: 12,
+          color: theme.subtext,
+        }}>
+          Pool: {bet.totalPool.toFixed(2)} SOL
+        </Text>
+        
+        <Text style={{
+          fontSize: 12,
+          color: theme.subtext,
+        }}>
+          {formatTimeLeft(bet.endTime)}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export const UserScreen = () => {
   // Remove signedMessages and signMessage logic
   const { logout, user } = usePrivy();
@@ -57,6 +182,8 @@ export const UserScreen = () => {
   const [sendSuccess, setSendSuccess] = useState('');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'previous'>('live');
+  const [userBets, setUserBets] = useState<any[]>([]);
+  const [loadingBets, setLoadingBets] = useState(false);
   const windowWidth = Dimensions.get('window').width;
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const { theme: themeName, toggleTheme } = useContext(ThemeContext);
@@ -104,13 +231,35 @@ export const UserScreen = () => {
   }, [account?.address]);
 
   useEffect(() => {
-    // Fetch real-time SOL price in USD
+    // Fetch real-time SOL price in USD using Jupiter
     const fetchSolPrice = async () => {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-        const data = await res.json();
-        setSolPrice(data.solana.usd);
-      } catch {}
+        // SOL mint address
+        const SOL_MINT = 'So11111111111111111111111111111111111111112';
+        // USDC mint address  
+        const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+        // 1 SOL in lamports
+        const oneSOLInLamports = 1000000000;
+        
+        const response = await fetch(
+          `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=${oneSOLInLamports}&slippageBps=50`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Convert USDC amount (6 decimals) to USD price
+          const usdcAmount = parseInt(data.outAmount) / 1000000; // USDC has 6 decimals
+          setSolPrice(usdcAmount);
+        }
+      } catch (error) {
+        console.error('Error fetching SOL price from Jupiter:', error);
+        // Fallback to CoinGecko if Jupiter fails
+        try {
+          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+          const data = await res.json();
+          setSolPrice(data.solana.usd);
+        } catch {}
+      }
     };
     fetchSolPrice();
     const interval = setInterval(fetchSolPrice, 60000); // update every 60s
@@ -123,6 +272,35 @@ export const UserScreen = () => {
       create();
     }
   }, [user, account?.address, create]);
+
+  // Fetch user's bets
+  const fetchUserBets = async () => {
+    if (!account?.address) return;
+    
+    setLoadingBets(true);
+    try {
+      const response = await fetch('https://apipoolc.vercel.app/api/read');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Filter bets where user is a participant
+          const allBets = data.bets || [];
+          const participatedBets = allBets.filter((bet: any) => 
+            bet.participants?.some((p: any) => p.wallet === account.address)
+          );
+          setUserBets(participatedBets);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user bets:', error);
+    } finally {
+      setLoadingBets(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserBets();
+  }, [account?.address]);
 
   // Check if Twitter is already linked
   const hasTwitter = user?.linked_accounts?.some(
@@ -510,7 +688,7 @@ export const UserScreen = () => {
             style={{  borderRadius: 18, borderWidth: 3, borderColor: theme.border, paddingVertical: 14, paddingHorizontal: 32, minWidth: 180, alignItems: 'center', marginBottom: 12, shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
             onPress={() => { setShowSettingsModal(false); logout(); }}
           >
-            <Text style={{ color: '#000', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Logout</Text>
+            <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Logout</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -531,15 +709,44 @@ export const UserScreen = () => {
         ))}
       </View>
       {/* Tab Content */}
-      {activeTab === 'live' ? (
-        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
-          <Text style={{ color: theme.subtext, fontSize: 16 }}>No live bets yet.</Text>
-        </View>
-      ) : (
-        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
-          <Text style={{ color: theme.subtext, fontSize: 16 }}>No previous bets yet.</Text>
-        </View>
-      )}
+      <ScrollView style={{ flex: 1, marginTop: 18 }} showsVerticalScrollIndicator={false}>
+        {loadingBets ? (
+          <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
+            <ActivityIndicator color={theme.green} />
+            <Text style={{ color: theme.subtext, fontSize: 16, marginTop: 8 }}>Loading your bets...</Text>
+          </View>
+        ) : (
+          <>
+            {activeTab === 'live' ? (
+              // Live bets
+              userBets.filter(bet => bet.isActive && new Date(bet.endTime) > new Date()).length === 0 ? (
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
+                  <Text style={{ color: theme.subtext, fontSize: 16 }}>No live bets yet.</Text>
+                </View>
+              ) : (
+                userBets
+                  .filter(bet => bet.isActive && new Date(bet.endTime) > new Date())
+                  .map((bet, index) => (
+                    <BetCard key={bet.id} bet={bet} userWallet={account?.address} theme={theme} />
+                  ))
+              )
+            ) : (
+              // Previous bets (ended or inactive)
+              userBets.filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date()).length === 0 ? (
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
+                  <Text style={{ color: theme.subtext, fontSize: 16 }}>No previous bets yet.</Text>
+                </View>
+              ) : (
+                userBets
+                  .filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date())
+                  .map((bet, index) => (
+                    <BetCard key={bet.id} bet={bet} userWallet={account?.address} theme={theme} />
+                  ))
+              )
+            )}
+          </>
+        )}
+      </ScrollView>
 
       {/* Remove tabs and live/previous bets sections */}
       {/* Bottom nav is already present globally */}

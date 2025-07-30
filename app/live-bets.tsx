@@ -118,8 +118,11 @@ export default function LiveBetsScreen() {
         borderColor: 'rgba(255,255,255,0.1)',
       }}
       onPress={() => {
-        // Navigate to bet details or place bet
-        console.log('Navigate to bet:', bet.id);
+        // Navigate to bet details
+        router.push({
+          pathname: '/bet-details',
+          params: { betData: JSON.stringify(bet) }
+        });
       }}
     >
       {/* Question */}
@@ -249,6 +252,12 @@ export default function LiveBetsScreen() {
             borderRadius: 8,
             paddingHorizontal: 16,
             paddingVertical: 8,
+          }}
+          onPress={() => {
+            router.push({
+              pathname: '/bet-details',
+              params: { betData: JSON.stringify(bet) }
+            });
           }}
         >
           <Text style={{
