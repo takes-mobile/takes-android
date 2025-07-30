@@ -91,7 +91,7 @@ export const UserScreen = () => {
       if (!account?.address) return;
       setLoadingBalance(true);
       try {
-        const connection = new Connection('https://api.mainnet-beta.solana.com');
+        const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
         const balance = await connection.getBalance(new PublicKey(account.address));
         setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
       } catch (e) {

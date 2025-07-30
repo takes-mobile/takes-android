@@ -1,8 +1,10 @@
-import { useLocalSearchParams } from 'expo-router';
-import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, Animated } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { ThemeContext } from './_layout';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Connection, Transaction , Keypair} from '@solana/web3.js';
+import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -159,8 +161,11 @@ const SocialProof = ({ theme }: { theme: any }) => {
 export default function PreviewBetScreen() {
   const { description, answers, duration, amount } = useLocalSearchParams();
   const { theme: themeName } = useContext(ThemeContext);
+  const { wallets } = useEmbeddedSolanaWallet();
+  const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -198,6 +203,218 @@ export default function PreviewBetScreen() {
   } catch {
     answersArr = [];
   }
+
+  const createTokenName = (optionIndex: number) => {
+    if (answersArr.length >= 2) {
+      const option = answersArr[optionIndex]?.content || `Option${optionIndex + 1}`;
+      return `${option} `;
+    }
+    // Handle case where description might be an array
+    const desc = Array.isArray(description) ? description[0] : description;
+    return `${desc || 'Betting'} Token ${optionIndex + 1}`;
+  };
+
+  const createTokenSymbol = (optionIndex: number) => {
+    const tokenName = createTokenName(optionIndex);
+    // Take first 5 characters and convert to uppercase
+    return tokenName.substring(0, 5).toUpperCase().replace(/\s/g, '');
+  };
+
+  const handlePublishBet = async () => {
+    try {
+      setIsPublishing(true);
+
+      // Check if wallet is available
+      if (!wallets || wallets.length === 0) {
+        Alert.alert('Error', 'No wallet found. Please connect your wallet first.');
+        return;
+      }
+
+      const wallet = wallets[0];
+      const provider = await wallet.getProvider();
+
+      // Get user wallet address
+      const userWallet = wallet.address;
+
+      if (!userWallet) {
+        Alert.alert('Error', 'Unable to get wallet address.');
+        return;
+      }
+
+
+
+      // Create tokens for both options
+      const tokens = [];
+      
+      for (let i = 0; i < Math.min(answersArr.length, 2); i++) {
+        // Generate keypair for each token
+        console.log(`Generating keypair for option ${i + 1}...`);
+        const keypairResponse = await fetch('https://apipoolc.vercel.app/api/keypair');
+        
+        if (!keypairResponse.ok) {
+          throw new Error(`Keypair generation failed for option ${i + 1}: ${keypairResponse.status}`);
+        }
+
+        const keypairData = await keypairResponse.json();
+        
+        if (!keypairData.success || !keypairData.publicKey) {
+          throw new Error(`Failed to generate keypair for option ${i + 1}`);
+        }
+
+        console.log(`Keypair generated for option ${i + 1}:`, keypairData.publicKey);
+
+        // Prepare API parameters for this token
+        const tokenName = createTokenName(i);
+        const tokenSymbol = createTokenSymbol(i);
+        const mint = keypairData.publicKey;
+
+        console.log(`Creating token ${i + 1} with params:`, {
+          tokenName,
+          tokenSymbol,
+          mint,
+          userWallet
+        });
+
+        // Call the create API for this token
+        const createResponse = await fetch(
+          `https://apipoolc.vercel.app/api/create?tokenName=${encodeURIComponent(tokenName)}&tokenSymbol=${encodeURIComponent(tokenSymbol)}&mint=${mint}&userWallet=${userWallet}`
+        );
+
+        if (!createResponse.ok) {
+          throw new Error(`API call failed for token ${i + 1}: ${createResponse.status}`);
+        }
+
+        const createData = await createResponse.json();
+        
+        if (!createData.success || !createData.poolTx) {
+          throw new Error(`Failed to create token pool for option ${i + 1}`);
+        }
+
+        console.log(`Pool created successfully for option ${i + 1}:`, createData);
+
+        // Store the token data
+        tokens.push({
+          tokenName,
+          tokenSymbol,
+          mint,
+          poolTx: createData.poolTx,
+          keypair: keypairData.keypair
+        });
+      }
+
+
+
+      // Step 3: Process all transactions
+      const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+      const signatures = [];
+
+      for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        console.log(`Processing transaction for ${token.tokenName}...`);
+
+        // Decode and prepare the transaction
+        const transaction = Transaction.from(Buffer.from(token.poolTx, 'base64'));
+
+        console.log(`Processing transaction for ${token.tokenName}...`);
+
+        // Get a fresh blockhash and update the transaction
+        console.log('Getting fresh blockhash...');
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
+
+        console.log('Signing transaction...');
+
+        // First, sign with the keypair (mint authority)
+        const keyPair = Keypair.fromSecretKey(new Uint8Array(token.keypair.secretKey));
+        
+        // Sign with keypair first
+        transaction.sign(keyPair);
+
+        console.log(`Transaction signed with keypair for ${token.tokenName}`);
+
+        // Then sign with user's wallet using Privy
+        const { signedTransaction } = await provider.request({
+          method: 'signTransaction',
+          params: {
+            transaction: transaction
+          },
+        });
+
+        console.log(`Transaction signed for ${token.tokenName}`);
+
+        // Send the signed transaction
+        const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed'
+        });
+
+        // Wait for confirmation
+        console.log('Waiting for transaction confirmation...');
+        await connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight
+        }, 'confirmed');
+        
+        console.log(`Transaction confirmed for ${token.tokenName}:`, signature);
+        signatures.push(signature);
+      }
+
+      // Success! Now add the bet to the database
+      const tokenNames = tokens.map(t => t.tokenName).join(' & ');
+      
+      // Prepare bet data for database
+      const betData = {
+        question: Array.isArray(description) ? description[0] : description,
+        options: answersArr.map(answer => answer.content),
+        tokenAddresses: tokens.map(token => token.mint),
+        solAmount: parseFloat(Array.isArray(amount) ? amount[0] : amount || '1'),
+        duration: parseInt(Array.isArray(duration) ? duration[0] : duration || '24'),
+        userWallet: userWallet,
+        creatorName: "Anonymous", // You can make this configurable later
+        category: "General" // You can make this configurable later
+      };
+
+      console.log('Adding bet to database:', betData);
+
+      // Call the add API to store the bet
+      const addResponse = await fetch('https://apipoolc.vercel.app/api/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(betData),
+      });
+
+      if (!addResponse.ok) {
+        console.warn('Failed to add bet to database, but tokens were created successfully');
+      } else {
+        const addData = await addResponse.json();
+        console.log('Bet added to database:', addData);
+      }
+
+      Alert.alert(
+        'Success! 🎉',
+        `Your bet has been published successfully!\n\nTokens created: ${tokenNames}\n\nTransactions: ${signatures.join(', ')}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back()
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('Publish error:', error);
+      Alert.alert(
+        'Error',
+        `Failed to publish bet: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   return (
     <ScrollView 
@@ -242,7 +459,7 @@ export default function PreviewBetScreen() {
             textShadowOffset: { width: 0, height: 2 },
             textShadowRadius: 4,
           }}>
-            {description}
+            {Array.isArray(description) ? description[0] : description}
           </Text>
 
           {/* Betting Options */}
@@ -365,6 +582,7 @@ export default function PreviewBetScreen() {
             </View>
           )}
 
+
           {/* Mock Statistics */}
           <View style={{
             backgroundColor: 'rgba(255,255,255,0.05)',
@@ -375,7 +593,7 @@ export default function PreviewBetScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <Text style={{ fontSize: 16, color: theme.subtext, fontWeight: '500' }}>Total Pot</Text>
               <Text style={{ fontSize: 20, color: theme.text, fontWeight: 'bold', fontFamily: 'monospace' }}>
-                {amount || '1'} SOL
+                {Array.isArray(amount) ? amount[0] : amount || '1'} SOL
               </Text>
             </View>
             
@@ -389,7 +607,7 @@ export default function PreviewBetScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ fontSize: 16, color: theme.warning, fontWeight: 'bold', marginRight: 4 }}>⏰</Text>
                 <Text style={{ fontSize: 16, color: theme.text, fontWeight: '600' }}>
-                  {duration || '24'}h {Math.floor(Math.random() * 60)}m
+                  {Array.isArray(duration) ? duration[0] : duration || '24'}h {Math.floor(Math.random() * 60)}m
                 </Text>
               </View>
             </View>
@@ -411,7 +629,8 @@ export default function PreviewBetScreen() {
               justifyContent: 'center',
               alignItems: 'center',
             }}
-            onPress={() => {/* TODO: Edit logic */}}
+            onPress={() => router.back()}
+            disabled={isPublishing}
           >
             <Text style={{
               color: theme.text,
@@ -429,8 +648,10 @@ export default function PreviewBetScreen() {
               borderRadius: 12,
               justifyContent: 'center',
               alignItems: 'center',
+              opacity: isPublishing ? 0.5 : 1,
             }}
             onPress={() => {/* TODO: Share logic */}}
+            disabled={isPublishing}
           >
             <LinearGradient
               colors={['#3B82F6', '#8B5CF6']}
@@ -465,11 +686,13 @@ export default function PreviewBetScreen() {
             shadowOpacity: 0.4,
             shadowRadius: 25,
             elevation: 10,
+            opacity: isPublishing ? 0.7 : 1,
           }}
-          onPress={() => {/* TODO: Publish logic */}}
+          onPress={handlePublishBet}
+          disabled={isPublishing}
         >
           <LinearGradient
-            colors={['#10B981', '#059669']}
+            colors={isPublishing ? ['#6B7280', '#4B5563'] : ['#10B981', '#059669']}
             style={{
               position: 'absolute',
               left: 0,
@@ -485,10 +708,10 @@ export default function PreviewBetScreen() {
             fontWeight: 'bold',
             letterSpacing: 0.5,
           }}>
-            Publish Bet ✅
+            {isPublishing ? 'Publishing... ⏳' : 'Publish Bet ✅'}
           </Text>
         </TouchableOpacity>
       </Animated.View>
     </ScrollView>
   );
-} 
+}
