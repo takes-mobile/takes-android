@@ -39,6 +39,7 @@ export default function BetDetailsScreen() {
   const [betAmount, setBetAmount] = useState('0.1');
   const [isPlacingBet, setIsPlacingBet] = useState(false);
   const [showBetModal, setShowBetModal] = useState(false);
+  const [isDrawingWinner, setIsDrawingWinner] = useState(false);
 
   const theme = {
     background: '#0F172A',
@@ -229,6 +230,78 @@ export default function BetDetailsScreen() {
     }
   };
 
+  const handleDrawWinner = async () => {
+    if (!bet) return;
+
+    const isExpired = new Date(bet.endTime) <= new Date();
+    
+    if (!isExpired) {
+      const timeLeft = formatTimeLeft(bet.endTime);
+      Alert.alert(
+        'Bet Still Active',
+        `${timeLeft} left for deciding who won. Winner can only be drawn after the betting period ends.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    // Check if winner is already drawn
+    if (bet.winner !== null) {
+      Alert.alert(
+        'Winner Already Drawn',
+        `This bet has already been resolved. Winner: ${typeof bet.winner === 'number' && bet.options[bet.winner] ? bet.options[bet.winner] : 'Unknown'}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setIsDrawingWinner(true);
+
+    try {
+      // Call the draw winner API with both token addresses
+      const response = await fetch('https://apipoolc.vercel.app/api/drawwinner', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          betId: bet.id,
+          tokenAddresses: bet.tokenAddresses,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local bet data
+        if (data.bet) {
+          setBet(data.bet);
+        }
+
+        Alert.alert(
+          'Winner Drawn! 🎉',
+          `The winner has been determined!\n\nWinning Option: ${data.winningOption || 'Unknown'}\n\nWinners will receive their rewards automatically.`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        throw new Error(data.message || 'Failed to draw winner');
+      }
+
+    } catch (error) {
+      console.error('Draw winner error:', error);
+      Alert.alert(
+        'Error',
+        `Failed to draw winner: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsDrawingWinner(false);
+    }
+  };
+
   if (!bet) {
     return (
       <View style={{ 
@@ -359,7 +432,7 @@ export default function BetDetailsScreen() {
             }}>
               {option}
             </Text>
-            {bet.participants.length > 0 && (
+            {/* {bet.participants.length > 0 && (
               <Text style={{
                 fontSize: 14,
                 color: theme.subtext,
@@ -368,7 +441,7 @@ export default function BetDetailsScreen() {
               }}>
                 {bet.participants.filter(p => p.optionIndex === index).length} participants
               </Text>
-            )}
+            )} */}
           </TouchableOpacity>
         ))}
 
@@ -447,6 +520,64 @@ export default function BetDetailsScreen() {
           </Text>
         </TouchableOpacity>
       )}
+
+      {/* Draw Winner Button */}
+      <TouchableOpacity
+        style={{
+          height: 40,
+          width: '40%',
+          borderRadius: 16,
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginTop: 26,
+          shadowColor: theme.orange,
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.4,
+          shadowRadius: 25,
+          elevation: 10,
+        //   marginTop: 10,
+          opacity: isDrawingWinner ? 0.7 : 1,
+        }}
+        onPress={handleDrawWinner}
+        disabled={isDrawingWinner}
+      >
+        <LinearGradient
+          colors={isDrawingWinner ? ['#6B7280', '#4B5563'] : [theme.orange, '#DC2626']}
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+            borderRadius: 16,
+          }}
+        />
+        {isDrawingWinner ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+            <Text style={{
+              color: '#fff',
+              fontSize: 18,
+              fontWeight: 'bold',
+              letterSpacing: 0.5,
+            }}>
+              Drawing Winner...
+            </Text>
+          </View>
+        ) : (
+          <Text style={{
+            color: '#fff',
+            fontSize: 18,
+            fontWeight: 'bold',
+            letterSpacing: 0.5,
+          }}>
+            {isExpired && bet.winner === null ? 'Draw Winner 🎲' : 
+             isExpired && bet.winner !== null ? 'Winner Already Drawn ✅' :
+             `Draw Winner`}
+             {/* (${formatTimeLeft(bet.endTime)} left) ⏰ */}
+          </Text>
+        )}
+      </TouchableOpacity>
 
       {/* Bet Amount Modal */}
       <Modal
