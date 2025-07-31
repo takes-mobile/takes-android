@@ -284,7 +284,7 @@ export default function BetDetailsScreen() {
 
         Alert.alert(
           'Winner Drawn! 🎉',
-          `The winner has been determined!\n\nWinning Option: ${data.winningOption || 'Unknown'}\n\nWinners will receive their rewards automatically.`,
+          `The winner has been determined!\n\nWinning Option: ${data.winningOption || 'Unknown'}\n\nWinners have to sell their tokens to the pool to withdraw in sol.`,
           [{ text: 'OK' }]
         );
       } else {
