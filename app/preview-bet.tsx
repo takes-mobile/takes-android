@@ -1,15 +1,17 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
+import RetroButton from '../components/RetroButton';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { ThemeContext } from './_layout';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Connection, Transaction , Keypair} from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Animated VS Component
-const AnimatedVS = () => {
+const AnimatedVS = ({ theme }: { theme: any }) => {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -45,8 +47,8 @@ const AnimatedVS = () => {
       <Text style={{
         fontSize: 40,
         fontWeight: '800',
-        color: '#F97316',
-        textShadowColor: 'rgba(249, 115, 22, 0.5)',
+        color: theme.orange,
+        textShadowColor: `rgba(249, 115, 22, 0.5)`,
         textShadowOffset: { width: 0, height: 0 },
         textShadowRadius: 10,
       }}>
@@ -85,7 +87,7 @@ const MockStats = ({ theme }: { theme: any }) => {
         <Animated.View style={{
           height: '100%',
           width: `${progressA}%`,
-          backgroundColor: '#3B82F6',
+          backgroundColor: theme.primary,
           borderRadius: 3,
         }} />
       </View>
@@ -103,7 +105,7 @@ const MockStats = ({ theme }: { theme: any }) => {
         <Animated.View style={{
           height: '100%',
           width: `${progressB}%`,
-          backgroundColor: '#EC4899',
+          backgroundColor: theme.pink,
           borderRadius: 3,
         }} />
       </View>
@@ -111,52 +113,7 @@ const MockStats = ({ theme }: { theme: any }) => {
   );
 };
 
-// Social Proof Component
-const SocialProof = ({ theme }: { theme: any }) => {
-  const [currentActivity, setCurrentActivity] = useState(0);
-  const activities = [
-    "John just bet 0.5 SOL on Option A 🔥",
-    "Sarah placed 0.3 SOL on Option B ⚡",
-    "Mike bet 1.2 SOL on Option A 🚀",
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentActivity((prev) => (prev + 1) % activities.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <View style={{
-      backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 12,
-      padding: 12,
-      marginTop: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-    }}>
-      <View style={{
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: '#3B82F6',
-        marginRight: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
-        <Text style={{ color: '#fff', fontSize: 16 }}>👤</Text>
-      </View>
-      <Text style={{
-        fontSize: 14,
-        color: theme.subtext,
-        flex: 1,
-      }}>
-        {activities[currentActivity]}
-      </Text>
-    </View>
-  );
-};
+// Social Proof Component REMOVED
 
 export default function PreviewBetScreen() {
   const { description, answers, duration, amount } = useLocalSearchParams();
@@ -184,12 +141,12 @@ export default function PreviewBetScreen() {
   }, []);
 
   const theme = {
-    background: '#0F172A',
-    card: 'rgba(255,255,255,0.1)',
+    background: '#1e1a2c', // Dark purple background
+    card: 'rgba(200,182,232,0.1)', // Translucent light purple
     text: '#FFFFFF',
-    subtext: '#94A3B8',
-    primary: '#3B82F6',
-    secondary: '#8B5CF6',
+    subtext: '#c8b6e8', // Light purple subtext
+    primary: '#8b5cf6', // Brighter purple as primary
+    secondary: '#a78bfa', // Lighter purple as secondary
     success: '#10B981',
     warning: '#EF4444',
     orange: '#F97316',
@@ -433,128 +390,117 @@ export default function PreviewBetScreen() {
         opacity: fadeAnim,
         transform: [{ translateY: slideAnim }],
       }}>
-        {/* Preview Card */}
+        {/* Preview Card - Using same layout as live-bets */}
         <View style={{
-          backgroundColor: theme.card,
-          borderRadius: 24,
-          padding: 24,
+          backgroundColor: '#242235',
+          borderRadius: 16,
+          padding: 20,
           marginBottom: 24,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 25 },
-          shadowOpacity: 0.4,
-          shadowRadius: 50,
-          elevation: 20,
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.1)',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 10,
         }}>
-          {/* Question Display */}
-          <Text style={{
-            fontSize: 24,
-            fontWeight: 'bold',
-            color: theme.text,
-            textAlign: 'center',
-            marginBottom: 24,
-            lineHeight: 32,
-            textShadowColor: 'rgba(0,0,0,0.3)',
-            textShadowOffset: { width: 0, height: 2 },
-            textShadowRadius: 4,
+          {/* Question Display with bottom border */}
+          <View style={{ 
+            paddingBottom: 15, 
+            borderBottomWidth: 1, 
+            borderBottomColor: `${theme.text}15`, 
+            marginBottom: 20 
           }}>
-            {Array.isArray(description) ? description[0] : description}
-          </Text>
+            <Text style={{
+              fontSize: 24,
+              fontWeight: 'bold',
+              color: theme.text,
+              lineHeight: 32,
+              flexWrap: 'wrap'
+            }}>
+              {Array.isArray(description) ? description[0] : description}
+            </Text>
+          </View>
 
-          {/* Betting Options */}
+          {/* Answer Options - VS layout exactly as in sketch */}
           {answersArr.length === 2 ? (
-            <View style={{ marginBottom: 20 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <LinearGradient
-                  colors={['#3B82F6', '#1D4ED8']}
-                  style={{
-                    flex: 1,
-                    height: 60,
-                    borderRadius: 16,
-                    marginRight: 12,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    shadowColor: '#3B82F6',
-                    shadowOffset: { width: 0, height: 10 },
-                    shadowOpacity: 0.4,
-                    shadowRadius: 25,
-                    elevation: 10,
-                  }}
-                >
-                  {answersArr[0].type === 'image' ? (
-                    <Image 
-                      source={{ uri: answersArr[0].content }} 
-                      style={{ 
-                        width: 40, 
-                        height: 40, 
-                        borderRadius: 8,
-                      }} 
-                    />
-                  ) : (
-                    <Text style={{
-                      fontSize: 18,
-                      fontWeight: '600',
-                      color: '#fff',
-                      textAlign: 'center',
-                    }}>
-                      {answersArr[0].content}
-                    </Text>
-                  )}
-                </LinearGradient>
-
-                <AnimatedVS />
-
-                <LinearGradient
-                  colors={['#EC4899', '#BE185D']}
-                  style={{
-                    flex: 1,
-                    height: 60,
-                    borderRadius: 16,
-                    marginLeft: 12,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    shadowColor: '#EC4899',
-                    shadowOffset: { width: 0, height: 10 },
-                    shadowOpacity: 0.4,
-                    shadowRadius: 25,
-                    elevation: 10,
-                  }}
-                >
-                  {answersArr[1].type === 'image' ? (
-                    <Image 
-                      source={{ uri: answersArr[1].content }} 
-                      style={{ 
-                        width: 40, 
-                        height: 40, 
-                        borderRadius: 8,
-                      }} 
-                    />
-                  ) : (
-                    <Text style={{
-                      fontSize: 18,
-                      fontWeight: '600',
-                      color: '#fff',
-                      textAlign: 'center',
-                    }}>
-                      {answersArr[1].content}
-                    </Text>
-                  )}
-                </LinearGradient>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 30 }}>
+              <View 
+                style={{
+                  width: '40%',
+                  backgroundColor: `${theme.primary}15`,
+                  borderRadius: 12,
+                  padding: 12,
+                  marginRight: 5,
+                  borderWidth: 1,
+                  borderColor: `${theme.primary}30`,
+                  alignItems: 'center',
+                }}
+              >
+                {answersArr[0].type === 'image' ? (
+                  <Image 
+                    source={{ uri: answersArr[0].content }} 
+                    style={{ 
+                      width: 40, 
+                      height: 40, 
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }} 
+                  />
+                ) : null}
+                <Text style={{
+                  fontSize: 16,
+                  color: theme.text,
+                  fontWeight: '600',
+                  textAlign: 'center',
+                }}>
+                  {answersArr[0].content}
+                </Text>
               </View>
-
-              <MockStats theme={theme} />
+              
+              <Image source={require('../assets/images/vs.png')} style={{ width: 40, height: 40, marginHorizontal: 10 }} />
+              
+              <View 
+                style={{
+                  width: '40%',
+                  backgroundColor: `${theme.warning}15`,
+                  borderRadius: 12,
+                  padding: 12,
+                  marginLeft: 5,
+                  borderWidth: 1,
+                  borderColor: `${theme.warning}30`,
+                  alignItems: 'center',
+                }}
+              >
+                {answersArr[1].type === 'image' ? (
+                  <Image 
+                    source={{ uri: answersArr[1].content }} 
+                    style={{ 
+                      width: 40, 
+                      height: 40, 
+                      borderRadius: 8,
+                      marginBottom: 8,
+                    }} 
+                  />
+                ) : null}
+                <Text style={{
+                  fontSize: 16,
+                  color: theme.text,
+                  fontWeight: '600',
+                  textAlign: 'center',
+                }}>
+                  {answersArr[1].content}
+                </Text>
+              </View>
             </View>
           ) : (
             <View style={{ marginBottom: 20 }}>
               {answersArr.map((answer, idx) => (
                 <View key={idx} style={{
-                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  backgroundColor: theme.card,
                   borderRadius: 16,
                   padding: 16,
                   marginBottom: 12,
                   borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.1)',
+                  borderColor: `${theme.text}15`,
                 }}>
                   {answer.type === 'image' ? (
                     <View style={{ alignItems: 'center' }}>
@@ -583,134 +529,76 @@ export default function PreviewBetScreen() {
           )}
 
 
-          {/* Mock Statistics */}
-          <View style={{
-            backgroundColor: 'rgba(255,255,255,0.05)',
-            borderRadius: 16,
-            padding: 20,
-            marginBottom: 16,
-          }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ fontSize: 16, color: theme.subtext, fontWeight: '500' }}>Total Pot</Text>
-              <Text style={{ fontSize: 20, color: theme.text, fontWeight: 'bold', fontFamily: 'monospace' }}>
-                {Array.isArray(amount) ? amount[0] : amount || '1'} SOL
+          {/* Stats positioned at bottom right as per sketch */}
+          <View style={{ position: 'absolute', bottom: 20, right: 20 }}>
+            {/* Player count with label */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontSize: 14, color: theme.text, fontWeight: 'bold', marginRight: 4 }}>
+                Player count:
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.text, fontWeight: 'bold' }}>
+                24
               </Text>
             </View>
             
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <Text style={{ fontSize: 16, color: theme.subtext, fontWeight: '500' }}>Participants</Text>
-              <Text style={{ fontSize: 16, color: theme.text, fontWeight: '600' }}>24 people</Text>
+            {/* Pool size with label */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontSize: 14, color: theme.text, fontWeight: 'bold', marginRight: 4 }}>
+                Pool size:
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.text, fontWeight: 'bold' }}>
+                {(parseFloat(Array.isArray(amount) ? amount[0] : amount || '1')).toFixed(1)} SOL
+              </Text>
             </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, color: theme.subtext, fontWeight: '500' }}>Time Left</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Text style={{ fontSize: 16, color: theme.warning, fontWeight: 'bold', marginRight: 4 }}>⏰</Text>
-                <Text style={{ fontSize: 16, color: theme.text, fontWeight: '600' }}>
-                  {Array.isArray(duration) ? duration[0] : duration || '24'}h {Math.floor(Math.random() * 60)}m
-                </Text>
-              </View>
+            
+            {/* Hot/Trending icon */}
+            <View style={{ 
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              backgroundColor: `${theme.orange}20`, 
+              padding: 8, 
+              borderRadius: 50,
+              borderWidth: 1,
+              borderColor: `${theme.orange}40`
+            }}>
+              <FontAwesome name="fire" size={18} color={theme.orange} />
             </View>
           </View>
-
-          <SocialProof theme={theme} />
-        </View>
-
-        {/* Action Buttons */}
-        <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              height: 44,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.2)',
-              backgroundColor: 'transparent',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            onPress={() => router.back()}
-            disabled={isPublishing}
-          >
-            <Text style={{
-              color: theme.text,
-              fontSize: 16,
-              fontWeight: '600',
-            }}>
-              Edit
+          
+          {/* Time tag positioned bottom left as per sketch */}
+          <View style={{
+            position: 'absolute',
+            bottom: 20,
+            left: 20,
+            flexDirection: 'row',
+            alignItems: 'center',
+            zIndex: 10
+          }}>
+            <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4 }}>
+              {parseInt(Array.isArray(duration) ? duration[0] : duration || '24')}h
             </Text>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={{
-              flex: 2,
-              height: 44,
-              borderRadius: 12,
-              justifyContent: 'center',
-              alignItems: 'center',
-              opacity: isPublishing ? 0.5 : 1,
-            }}
-            onPress={() => {/* TODO: Share logic */}}
-            disabled={isPublishing}
-          >
-            <LinearGradient
-              colors={['#3B82F6', '#8B5CF6']}
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                borderRadius: 12,
-              }}
-            />
-            <Text style={{
-              color: '#fff',
-              fontSize: 16,
-              fontWeight: '600',
-            }}>
-              Share Preview
-            </Text>
-          </TouchableOpacity>
+          {/* SocialProof REMOVED */}
         </View>
 
         {/* Publish Button */}
-        <TouchableOpacity
-          style={{
-            height: 56,
-            borderRadius: 16,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#10B981',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.4,
-            shadowRadius: 25,
-            elevation: 10,
-            opacity: isPublishing ? 0.7 : 1,
-          }}
+        <RetroButton
+       
+          title={isPublishing ? 'Creating...' : 'Create Bet'}
           onPress={handlePublishBet}
           disabled={isPublishing}
-        >
-          <LinearGradient
-            colors={isPublishing ? ['#6B7280', '#4B5563'] : ['#10B981', '#059669']}
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0,
-              borderRadius: 16,
-            }}
-          />
-          <Text style={{
-            color: '#fff',
-            fontSize: 18,
-            fontWeight: 'bold',
-            letterSpacing: 0.5,
-          }}>
-            {isPublishing ? 'Publishing... ⏳' : 'Publish Bet ✅'}
-          </Text>
-        </TouchableOpacity>
+          backgroundColor="#29d620"
+          textColor="#FFFFFF"
+          fontSize={24}
+          letterSpacing={0.5}
+          minWidth={screenWidth - 40}
+          minHeight={56}
+          style={{ marginTop: 10 }}
+          textShadowColor='black'
+        />
       </Animated.View>
     </ScrollView>
   );

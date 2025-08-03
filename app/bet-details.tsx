@@ -42,12 +42,12 @@ export default function BetDetailsScreen() {
   const [isDrawingWinner, setIsDrawingWinner] = useState(false);
 
   const theme = {
-    background: '#0F172A',
-    card: 'rgba(255,255,255,0.1)',
+    background: '#1e1a2c', // Dark purple background
+    card: 'rgba(200,182,232,0.1)', // Translucent light purple
     text: '#FFFFFF',
-    subtext: '#94A3B8',
-    primary: '#3B82F6',
-    secondary: '#8B5CF6',
+    subtext: '#c8b6e8', // Light purple subtext
+    primary: '#8b5cf6', // Brighter purple as primary
+    secondary: '#a78bfa', // Lighter purple as secondary
     success: '#10B981',
     warning: '#EF4444',
     orange: '#F97316',

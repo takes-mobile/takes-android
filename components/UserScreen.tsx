@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useEffect, useContext } from "react";
-import { Text, TextInput, View, Button, ScrollView, Image, TouchableOpacity, Alert, Modal, ActivityIndicator, ImageBackground, SafeAreaView, Dimensions, Pressable } from "react-native";
+import React, { useState, useCallback, useEffect, useContext, useRef } from "react";
+import { Text, TextInput, View, Button, ScrollView, Image, TouchableOpacity, Alert, Modal, ActivityIndicator, ImageBackground, SafeAreaView, Dimensions, Pressable, Animated } from "react-native";
+import { useBets } from "../context/BetsContext";
 
 import {
   usePrivy,
@@ -17,6 +18,7 @@ import { useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-styled';
 import { BN } from '@project-serum/anchor';
 import { ThemeContext } from '../app/_layout';
+import RetroButton from './RetroButton';
 
 const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
   if (x.type === "phone") {
@@ -35,131 +37,6 @@ const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
   }
 
   return x.type;
-};
-
-// BetCard component for user's bets
-const BetCard = ({ bet, userWallet, theme }: { bet: any; userWallet: string | undefined; theme: any }) => {
-  const router = useRouter();
-  
-  const formatTimeLeft = (endTime: string) => {
-    const end = new Date(endTime);
-    const now = new Date();
-    const diff = end.getTime() - now.getTime();
-    
-    if (diff <= 0) return 'Ended';
-    
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    
-    return `${hours}h ${minutes}m`;
-  };
-
-  // Find user's participation in this bet
-  const userParticipation = bet.participants?.find((p: any) => p.wallet === userWallet);
-  const userOption = userParticipation ? bet.options[userParticipation.optionIndex] : null;
-  const userBetAmount = userParticipation ? userParticipation.amount : 0;
-
-  const isExpired = new Date(bet.endTime) <= new Date();
-
-  return (
-    <TouchableOpacity
-      style={{
-        backgroundColor: theme.card,
-        borderRadius: 16,
-        padding: 18,
-        marginHorizontal: 18,
-        marginBottom: 16,
-        borderWidth: 2,
-        borderColor: theme.border,
-        shadowColor: theme.shadow,
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 3,
-      }}
-      onPress={() => {
-        router.push({
-          pathname: '/bet-details',
-          params: { betData: JSON.stringify(bet) }
-        });
-      }}
-    >
-      {/* Question */}
-      <Text style={{
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: theme.text,
-        marginBottom: 12,
-        lineHeight: 22,
-      }}>
-        {bet.question}
-      </Text>
-
-      {/* User's bet info */}
-      <View style={{
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
-        borderRadius: 12,
-        padding: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: theme.green + '40',
-      }}>
-        <Text style={{
-          fontSize: 14,
-          color: theme.green,
-          fontWeight: '600',
-          marginBottom: 4,
-        }}>
-          Your Bet: {userOption}
-        </Text>
-        <Text style={{
-          fontSize: 16,
-          color: theme.text,
-          fontWeight: 'bold',
-        }}>
-          Amount: {userBetAmount} SOL
-        </Text>
-      </View>
-
-      {/* Status and stats */}
-      <View style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <View style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: bet.isActive && !isExpired ? theme.green : '#ef4444',
-            marginRight: 6,
-          }} />
-          <Text style={{
-            fontSize: 12,
-            color: bet.isActive && !isExpired ? theme.green : '#ef4444',
-            fontWeight: '600',
-          }}>
-            {bet.isActive && !isExpired ? 'Active' : 'Ended'}
-          </Text>
-        </View>
-        
-        <Text style={{
-          fontSize: 12,
-          color: theme.subtext,
-        }}>
-          Pool: {bet.totalPool.toFixed(2)} SOL
-        </Text>
-        
-        <Text style={{
-          fontSize: 12,
-          color: theme.subtext,
-        }}>
-          {formatTimeLeft(bet.endTime)}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
 };
 
 export const UserScreen = () => {
@@ -182,11 +59,12 @@ export const UserScreen = () => {
   const [sendSuccess, setSendSuccess] = useState('');
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'previous'>('live');
-  const [userBets, setUserBets] = useState<any[]>([]);
-  const [loadingBets, setLoadingBets] = useState(false);
-  const windowWidth = Dimensions.get('window').width;
+  const { width: windowWidth, height: screenHeight } = Dimensions.get('window');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
+  const modalOpacityAnim = useRef(new Animated.Value(0)).current;
   const { theme: themeName, toggleTheme } = useContext(ThemeContext);
+  const { fetchBets, lastFetched } = useBets();
   const lightTheme = {
     background: '#f6f8fa',
     card: '#fff',
@@ -200,16 +78,16 @@ export const UserScreen = () => {
     placeholder: '#bbb',
   };
   const darkTheme = {
-    background: '#18181b',
-    card: '#232323',
+    background: '#1e1a2c', // Dark purple background
+    card: '#2d2640', // Medium-dark purple card
     text: '#fff',
-    subtext: '#bbb',
-    border: '#333',
+    subtext: '#c8b6e8', // Light purple subtext
+    border: '#4a3f66', // Medium purple border
     green: '#22c55e',
-    shadow: '#000',
-    input: '#232323',
-    modal: '#232323',
-    placeholder: '#888',
+    shadow: '#130f1c', // Very dark purple shadow
+    input: '#352d4d', // Medium-dark purple input
+    modal: '#2d2640', // Same as card color
+    placeholder: '#8778b3', // Medium-light purple placeholder
   };
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
 
@@ -218,7 +96,7 @@ export const UserScreen = () => {
       if (!account?.address) return;
       setLoadingBalance(true);
       try {
-        const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+        const connection = new Connection('https://api.mainnet-beta.solana.com');
         const balance = await connection.getBalance(new PublicKey(account.address));
         setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
       } catch (e) {
@@ -231,35 +109,13 @@ export const UserScreen = () => {
   }, [account?.address]);
 
   useEffect(() => {
-    // Fetch real-time SOL price in USD using Jupiter
+    // Fetch real-time SOL price in USD
     const fetchSolPrice = async () => {
       try {
-        // SOL mint address
-        const SOL_MINT = 'So11111111111111111111111111111111111111112';
-        // USDC mint address  
-        const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-        // 1 SOL in lamports
-        const oneSOLInLamports = 1000000000;
-        
-        const response = await fetch(
-          `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=${oneSOLInLamports}&slippageBps=50`
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          // Convert USDC amount (6 decimals) to USD price
-          const usdcAmount = parseInt(data.outAmount) / 1000000; // USDC has 6 decimals
-          setSolPrice(usdcAmount);
-        }
-      } catch (error) {
-        console.error('Error fetching SOL price from Jupiter:', error);
-        // Fallback to CoinGecko if Jupiter fails
-        try {
-          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-          const data = await res.json();
-          setSolPrice(data.solana.usd);
-        } catch {}
-      }
+        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+        const data = await res.json();
+        setSolPrice(data.solana.usd);
+      } catch {}
     };
     fetchSolPrice();
     const interval = setInterval(fetchSolPrice, 60000); // update every 60s
@@ -272,35 +128,49 @@ export const UserScreen = () => {
       create();
     }
   }, [user, account?.address, create]);
-
-  // Fetch user's bets
-  const fetchUserBets = async () => {
-    if (!account?.address) return;
+  
+  // Open settings modal with animation
+  const openSettingsModal = () => {
+    // Reset animation values
+    modalSlideAnim.setValue(screenHeight);
+    modalOpacityAnim.setValue(0);
+    setShowSettingsModal(true);
     
-    setLoadingBets(true);
-    try {
-      const response = await fetch('https://apipoolc.vercel.app/api/read');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          // Filter bets where user is a participant
-          const allBets = data.bets || [];
-          const participatedBets = allBets.filter((bet: any) => 
-            bet.participants?.some((p: any) => p.wallet === account.address)
-          );
-          setUserBets(participatedBets);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching user bets:', error);
-    } finally {
-      setLoadingBets(false);
-    }
+    // Use a short delay to ensure modal is fully rendered
+    setTimeout(() => {
+      Animated.parallel([
+        Animated.spring(modalSlideAnim, {
+          toValue: 0,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 100);
   };
 
-  useEffect(() => {
-    fetchUserBets();
-  }, [account?.address]);
+  // Close settings modal with animation
+  const closeSettingsModal = () => {
+    Animated.parallel([
+      Animated.timing(modalSlideAnim, {
+        toValue: screenHeight,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(modalOpacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowSettingsModal(false);
+    });
+  };
 
   // Check if Twitter is already linked
   const hasTwitter = user?.linked_accounts?.some(
@@ -315,44 +185,156 @@ export const UserScreen = () => {
     return null;
   }
 
+  // --- PROFILE HEADER (NO GREEN BG, NAME+USERNAME BESIDE PFP) ---
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Top Banner (Twitter-style resolution) */}
-      <ImageBackground
-        source={{ uri: 'https://abs.twimg.com/sticky/default_profile_banners/4k.png' }} // Twitter default banner
-        style={{ width: '100%', height: 150, backgroundColor: theme.card, justifyContent: 'flex-end' }}
-        resizeMode="cover"
-      >
-        {/* Settings button top right */}
-        <TouchableOpacity style={{ position: 'absolute', top: 24, right: 24, backgroundColor: theme.card, borderRadius: 20, borderWidth: 2, borderColor: theme.border, padding: 6, zIndex: 10 }}
-          onPress={() => setShowSettingsModal(true)}
-        >
-          <MaterialIcons name="settings" size={24} color={theme.text} />
-        </TouchableOpacity>
-        {/* Profile row: avatar left, username right, overlapping banner */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', position: 'absolute', left: 24, bottom: -24, zIndex: 5 }}>
-          {twitterPfp ? (
-            <Image source={{ uri: twitterPfp }} style={{ width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: theme.card, backgroundColor: theme.card }} />
-          ) : (
-            <MaterialIcons name="account-circle" size={72} color={theme.green} style={{ backgroundColor: theme.card, borderRadius: 36 }} />
-          )}
-          <Text style={{ fontWeight: 'bold', fontSize: 20, color: theme.text, marginLeft: 14 }}>
-            @{twitterAccount?.username || 'user'}
-          </Text>
+      {/* Profile Header */}
+      <View style={{
+        backgroundColor: theme.card,
+        borderBottomWidth: 2,
+        borderColor: theme.border,
+        position: 'relative',
+        zIndex: 1,
+        paddingBottom: 0,
+        paddingHorizontal: 0,
+      }}>
+        {/* No green banner */}
+        {/* Logout and Settings buttons stacked vertically at top right */}
+        <View style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          zIndex: 20,
+        }}>
+          <TouchableOpacity 
+            style={{ 
+              backgroundColor: theme.card, 
+              borderRadius: 20, 
+              borderWidth: 2, 
+              borderColor: theme.border, 
+              padding: 8,
+              shadowColor: theme.shadow,
+              shadowOpacity: 0.2,
+              shadowRadius: 3,
+              shadowOffset: { width: 0, height: 2 },
+              elevation: 4,
+              width: 40,
+              height: 40,
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onPress={openSettingsModal}
+          >
+            <MaterialIcons name="settings" size={22} color={theme.text} />
+          </TouchableOpacity>
         </View>
-      </ImageBackground>
+        {/* Profile picture and name/username beside it */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginTop: 60, // Adjusted for smaller buttons
+            paddingHorizontal: 24,
+            paddingBottom: 24,
+            backgroundColor: theme.card,
+            zIndex: 11,
+          }}
+        >
+          <View style={{
+            shadowColor: theme.shadow,
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+          }}>
+            {twitterPfp ? (
+              <Image 
+                source={{ uri: twitterPfp }} 
+                style={{ 
+                  width: 88, 
+                  height: 88, 
+                  borderRadius: 44, 
+                  borderWidth: 4, 
+                  borderColor: theme.card, 
+                  backgroundColor: theme.card 
+                }} 
+              />
+            ) : (
+              <MaterialIcons 
+                name="account-circle" 
+                size={88} 
+                color={theme.green} 
+                style={{ backgroundColor: theme.card, borderRadius: 44 }} 
+              />
+            )}
+          </View>
+          <View style={{ marginLeft: 20, flex: 1, justifyContent: 'center' }}>
+            <Text style={{
+              fontFamily: 'PressStart2P-Regular',
+              fontSize: 18,
+              color: theme.text,
+              textShadowColor: 'rgba(0,0,0,0.7)',
+              textShadowOffset: { width: 1, height: 1 },
+              textShadowRadius: 0,
+              marginBottom: 6,
+              flexShrink: 1,
+            }}>
+              {twitterAccount?.name || 'User'}
+            </Text>
+            <Text style={{
+              fontFamily: 'PressStart2P-Regular',
+              fontSize: 14,
+              color: theme.subtext,
+              marginBottom: 0,
+              flexShrink: 1,
+            }}>
+              @{twitterAccount?.username || 'user'}
+            </Text>
+          </View>
+        </View>
+      </View>
 
       {/* Wallet Balance Card */}
-      <View style={{ backgroundColor: theme.card, borderRadius: 18, marginHorizontal: 18, marginTop: 16, padding: 18, alignItems: 'flex-start', borderWidth: 3, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 }}>
-        <Text style={{ fontSize: 16, color: theme.text, fontWeight: 'bold', marginBottom: 8, textAlign: 'left' }}>wallet balance</Text>
-        <Text style={{ fontSize: 32, fontWeight: 'bold', color: theme.green, marginTop: 8, textAlign: 'left' }}>
+      <View style={{ backgroundColor: theme.card, borderRadius: 18, marginHorizontal: 18, marginTop: 18, padding: 18, alignItems: 'flex-start', borderWidth: 3, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 }}>
+        <Text style={{ 
+          fontSize: 14, 
+          color: theme.text, 
+          fontFamily: 'PressStart2P-Regular',
+          marginBottom: 8, 
+          textAlign: 'left',
+          textTransform: 'uppercase'
+        }}>
+          your BALANCE
+        </Text>
+        <Text style={{ 
+          fontSize: 24, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.green, 
+          marginTop: 12, 
+          textAlign: 'left',
+          textShadowColor: 'rgba(0,0,0,0.7)',
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 0,
+        }}>
           {solBalance && solPrice ? `$${(parseFloat(solBalance) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : loadingBalance ? 'Loading...' : '-'}
         </Text>
-        <Text style={{ fontSize: 18, color: theme.subtext, marginBottom: 8, textAlign: 'left' }}>
+        <Text style={{ 
+          fontSize: 14, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.subtext, 
+          marginTop: 12,
+          marginBottom: 8, 
+          textAlign: 'left' 
+        }}>
           {solBalance !== null ? `${solBalance} SOL` : ''}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-          <Text style={{ color: theme.green, fontSize: 18, fontWeight: 'bold', letterSpacing: 1 }}>
+          <Text style={{ 
+            color: theme.green, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            letterSpacing: 0 
+          }}>
             {account?.address ? `${account.address.slice(0, 4)}...${account.address.slice(-4)}` : ''}
           </Text>
           <TouchableOpacity
@@ -371,44 +353,20 @@ export const UserScreen = () => {
         {/* Wallet address QR code on profile */}
         {/* QR code removed as requested */}
       </View>
-      {/* Deposit and Withdraw buttons (outside balance card) */}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 18, marginBottom: 8 }}>
-        <TouchableOpacity
-          style={{
-            backgroundColor: theme.green,
-            borderRadius: 24,
-            borderWidth: 3,
-            borderColor: theme.border,
-            paddingVertical: 12,
-            paddingHorizontal: 32,
-            shadowColor: theme.shadow,
-            shadowOpacity: 0.10,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
-          }}
+      {/* Deposit button (outside balance card) */}
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 18, marginBottom: 8 }}>
+        <RetroButton
+          title="RECEIVE"
           onPress={() => setShowReceiveModal(true)}
-        >
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Deposit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            backgroundColor: theme.card,
-            borderRadius: 24,
-            borderWidth: 3,
-            borderColor: theme.green,
-            paddingVertical: 12,
-            paddingHorizontal: 32,
-            shadowColor: theme.shadow,
-            shadowOpacity: 0.10,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
-          }}
-          onPress={() => setShowSendModal(true)}
-        >
-          <Text style={{ color: theme.green, fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Withdraw</Text>
-        </TouchableOpacity>
+          backgroundColor="#4ed620" // Match the login button color
+          textColor="#000000"
+          fontSize={14}
+          letterSpacing={0}
+          fontWeight="normal"
+          minHeight={48}
+          minWidth={120}
+          textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+        />
       </View>
 
       {/* Deposit (Receive) Modal */}
@@ -447,9 +405,36 @@ export const UserScreen = () => {
             marginBottom: 24,
           }} />
           
-          <Text style={{ fontSize: 22, fontWeight: 'bold', color: theme.green, marginBottom: 18, letterSpacing: 1, textAlign: 'center' }}>Receive SOL</Text>
-          <Text style={{ color: theme.text, fontSize: 15, marginBottom: 12, textAlign: 'center' }}>Your Address:</Text>
-          <Text style={{ color: theme.green, fontSize: 13, marginBottom: 12, textAlign: 'center', fontWeight: 'bold' }}>{account?.address}</Text>
+          <Text style={{ 
+            fontSize: 18, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.green, 
+            marginBottom: 24, 
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            RECEIVE SOL
+          </Text>
+          <Text style={{ 
+            color: theme.text, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 12, 
+            textAlign: 'center' 
+          }}>
+            YOUR ADDRESS:
+          </Text>
+          <Text style={{ 
+            color: theme.green, 
+            fontSize: 10, 
+            marginBottom: 12, 
+            textAlign: 'center', 
+            fontFamily: 'PressStart2P-Regular',
+          }}>
+            {account?.address}
+          </Text>
           <TouchableOpacity
             onPress={async () => {
               if (account?.address) {
@@ -465,13 +450,18 @@ export const UserScreen = () => {
           {/* QR code removed from deposit modal as requested */}
           
           {/* Buy Crypto with Card Option */}
-          <TouchableOpacity
-            style={{ backgroundColor: theme.green, borderRadius: 18, borderWidth: 3, borderColor: theme.border, paddingVertical: 14, paddingHorizontal: 32, minWidth: 180, alignItems: 'center', marginBottom: 12, shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
+          <RetroButton
+            title="BUY CRYPTO WITH CARD"
+            backgroundColor="#4ed620"
+            textColor="#000000"
+            fontSize={12}
+            letterSpacing={0}
+            fontWeight="normal"
+            minHeight={48}
+            minWidth={240}
+            textStyle={{ fontFamily: 'PressStart2P-Regular' }}
             onPress={() => { setShowReceiveModal(false); Alert.alert('Buy Crypto', 'Buy crypto with card functionality coming soon!'); }}
-          >
-            <MaterialIcons name="credit-card" size={20} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Buy Crypto with Card</Text>
-          </TouchableOpacity>
+          />
         </View>
       </Modal>
 
@@ -484,8 +474,27 @@ export const UserScreen = () => {
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: theme.modal, borderRadius: 24, borderWidth: 3, borderColor: theme.border, padding: 28, width: 340, alignItems: 'center', shadowColor: theme.shadow, shadowOpacity: 0.12, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 12 }}>
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: theme.green, marginBottom: 18, letterSpacing: 1 }}>Withdraw SOL</Text>
-            <Text style={{ fontSize: 12, color: theme.subtext, marginBottom: 16, textAlign: 'center' }}>Currently in demo mode - transactions are simulated</Text>
+            <Text style={{ 
+              fontSize: 18, 
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.green, 
+              marginBottom: 24, 
+              textAlign: 'center',
+              textShadowColor: 'rgba(0,0,0,0.7)',
+              textShadowOffset: { width: 1, height: 1 },
+              textShadowRadius: 0,
+            }}>
+              WITHDRAW SOL
+            </Text>
+            <Text style={{ 
+              fontSize: 10, 
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.subtext, 
+              marginBottom: 16, 
+              textAlign: 'center' 
+            }}>
+              DEMO MODE - SIMULATED TRANSACTIONS
+            </Text>
             <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
               <TextInput
                 style={{ flex: 1, borderWidth: 3, borderColor: theme.green, borderRadius: 16, padding: 14, fontSize: 16, backgroundColor: theme.input, fontWeight: 'bold', color: theme.text }}
@@ -516,8 +525,16 @@ export const UserScreen = () => {
             {sendError ? <Text style={{ color: '#ff5252', marginBottom: 10, fontWeight: 'bold' }}>{sendError}</Text> : null}
             {sendSuccess ? <Text style={{ color: '#4caf50', marginBottom: 10, fontWeight: 'bold' }}>{sendSuccess}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 16, marginTop: 10 }}>
-              <TouchableOpacity
-                style={{ backgroundColor: theme.green, borderRadius: 18, borderWidth: 3, borderColor: theme.border, paddingVertical: 12, paddingHorizontal: 32, minWidth: 100, alignItems: 'center', shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
+              <RetroButton
+                title="SEND"
+                backgroundColor="#4ed620"
+                textColor="#000000"
+                fontSize={12}
+                letterSpacing={0}
+                fontWeight="normal"
+                minHeight={40}
+                minWidth={100}
+                textStyle={{ fontFamily: 'PressStart2P-Regular' }}
                 disabled={sending}
                 onPress={async () => {
                   setSendError('');
@@ -613,10 +630,18 @@ export const UserScreen = () => {
                   }
                 }}
               >
-                {sending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, letterSpacing: 1 }}>Send</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={{ backgroundColor: theme.card, borderRadius: 18, borderWidth: 3, borderColor: theme.green, paddingVertical: 12, paddingHorizontal: 32, minWidth: 100, alignItems: 'center', shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
+                {sending ? <ActivityIndicator color="#000" /> : null}
+              </RetroButton>
+              <RetroButton
+                title="CANCEL"
+                backgroundColor="#FFFFFF"
+                textColor="#000000"
+                fontSize={12}
+                letterSpacing={0}
+                fontWeight="normal"
+                minHeight={40}
+                minWidth={100}
+                textStyle={{ fontFamily: 'PressStart2P-Regular' }}
                 onPress={() => {
                   setShowSendModal(false);
                   setSendError('');
@@ -624,40 +649,55 @@ export const UserScreen = () => {
                   setSendAddress('');
                   setSendAmount('');
                 }}
-              >
-                <Text style={{ color: theme.green, fontWeight: 'bold', fontSize: 16, letterSpacing: 1 }}>Cancel</Text>
-              </TouchableOpacity>
+              />
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Settings Modal */}
+      {/* Settings Modal - Animated like in LoginScreen */}
       <Modal
         visible={showSettingsModal}
-        animationType="slide"
         transparent
+        animationType="none"
         onRequestClose={() => setShowSettingsModal(false)}
+        statusBarTranslucent={true}
+        presentationStyle="overFullScreen"
       >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onPress={() => setShowSettingsModal(false)}
-        />
-        <View style={{ 
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: theme.modal,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          padding: 28,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: -10 },
-          shadowOpacity: 0.3,
-          shadowRadius: 20,
-          elevation: 20,
-        }}>
+        <Animated.View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            opacity: modalOpacityAnim,
+          }}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+            }}
+            onPress={closeSettingsModal}
+          />
+        </Animated.View>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: theme.modal,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            padding: 32,
+            shadowColor: theme.shadow,
+            shadowOffset: { width: 0, height: -10 },
+            shadowOpacity: 0.3,
+            shadowRadius: 20,
+            elevation: 20,
+            zIndex: 1000,
+            transform: [{ translateY: modalSlideAnim }],
+            opacity: modalOpacityAnim,
+          }}
+        >
           {/* Handle */}
           <View style={{
             width: 40,
@@ -668,85 +708,92 @@ export const UserScreen = () => {
             marginBottom: 24,
           }} />
 
-          <Text style={{ fontSize: 22, fontWeight: 'bold', color: theme.green, marginBottom: 18, letterSpacing: 1, textAlign: 'center' }}>Settings</Text>
-          <TouchableOpacity
-            style={{ backgroundColor: theme.green, borderRadius: 18, borderWidth: 3, borderColor: theme.border, paddingVertical: 14, paddingHorizontal: 32, minWidth: 180, alignItems: 'center', marginBottom: 12, shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
-            onPress={() => { setShowSettingsModal(false); Alert.alert('Delegate Wallet', 'Delegate wallet functionality coming soon!'); }}
-          >
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Delegate Wallet</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.input, borderRadius: 18, borderWidth: 3, borderColor: theme.green, paddingVertical: 14, paddingHorizontal: 32, minWidth: 180, marginBottom: 12, shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
-            onPress={toggleTheme}
-          >
-            <MaterialCommunityIcons name={themeName === 'dark' ? 'white-balance-sunny' : 'moon-waning-crescent'} size={22} color={theme.green} style={{ marginRight: 10 }} />
-            <Text style={{ color: theme.green, fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>
-              {themeName === 'dark' ? 'Light Mode' : 'Dark Mode'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{  borderRadius: 18, borderWidth: 3, borderColor: theme.border, paddingVertical: 14, paddingHorizontal: 32, minWidth: 180, alignItems: 'center', marginBottom: 12, shadowColor: theme.shadow, shadowOpacity: 0.10, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
-            onPress={() => { setShowSettingsModal(false); logout(); }}
-          >
-            <Text style={{ color: 'red', fontWeight: 'bold', fontSize: 17, letterSpacing: 1 }}>Logout</Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={{ 
+            fontSize: 18, 
+            fontFamily: 'PressStart2P-Regular',
+            color: themeName === 'dark' ? theme.green : theme.text, 
+            marginBottom: 24, 
+            textAlign: 'center',
+            textShadowColor: themeName === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(34,197,94,0.15)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            SETTINGS
+          </Text>
+          
+          {/* Settings buttons with consistent theming */}
+          <View style={{gap: 16, alignItems: 'center', width: '100%'}}>
+            <RetroButton
+              title={themeName === 'dark' ? 'LIGHT MODE' : 'DARK MODE'}
+              onPress={toggleTheme}
+              backgroundColor={themeName === 'dark' ? '#ffffff' : '#000000'}
+              textColor={themeName === 'dark' ? '#000000' : '#ffffff'}
+              fontSize={12}
+              letterSpacing={0}
+              fontWeight="normal"
+              minHeight={48}
+              minWidth={240}
+              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+            />
+            <RetroButton
+              title="LOGOUT"
+              onPress={() => { closeSettingsModal(); logout(); }}
+              backgroundColor={themeName === 'dark' ? '#333333' : '#ffffff'}
+              textColor="#ff4444"
+              fontSize={12}
+              letterSpacing={0}
+              fontWeight="normal"
+              minHeight={48}
+              minWidth={240}
+              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+            />
+          </View>
+        </Animated.View>
       </Modal>
 
       {/* Tabs for Live Bets and Previous Bets */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 28, borderBottomWidth: 2, borderColor: theme.border, marginHorizontal: 8 }}>
         {[
-          { key: 'live', label: 'Your Live Bets' },
-          { key: 'previous', label: 'Previous Bets' },
+          { key: 'live', label: 'YOUR LIVE BETS' },
+          { key: 'previous', label: 'PREVIOUS BETS' },
         ].map(tab => (
           <TouchableOpacity
             key={tab.key}
             onPress={() => setActiveTab(tab.key as any)}
             style={{ borderBottomWidth: activeTab === tab.key ? 3 : 0, borderColor: theme.green, paddingBottom: 8, minWidth: 120, alignItems: 'center' }}
           >
-            <Text style={{ fontSize: 18, fontWeight: activeTab === tab.key ? 'bold' : 'normal', color: activeTab === tab.key ? theme.text : theme.subtext }}>{tab.label}</Text>
+            <Text style={{ 
+              fontSize: 12, 
+              fontFamily: 'PressStart2P-Regular',
+              color: activeTab === tab.key ? theme.text : theme.subtext 
+            }}>
+              {tab.label}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
       {/* Tab Content */}
-      <ScrollView style={{ flex: 1, marginTop: 18 }} showsVerticalScrollIndicator={false}>
-        {loadingBets ? (
-          <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
-            <ActivityIndicator color={theme.green} />
-            <Text style={{ color: theme.subtext, fontSize: 16, marginTop: 8 }}>Loading your bets...</Text>
-          </View>
-        ) : (
-          <>
-            {activeTab === 'live' ? (
-              // Live bets
-              userBets.filter(bet => bet.isActive && new Date(bet.endTime) > new Date()).length === 0 ? (
-                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
-                  <Text style={{ color: theme.subtext, fontSize: 16 }}>No live bets yet.</Text>
-                </View>
-              ) : (
-                userBets
-                  .filter(bet => bet.isActive && new Date(bet.endTime) > new Date())
-                  .map((bet, index) => (
-                    <BetCard key={bet.id} bet={bet} userWallet={account?.address} theme={theme} />
-                  ))
-              )
-            ) : (
-              // Previous bets (ended or inactive)
-              userBets.filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date()).length === 0 ? (
-                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
-                  <Text style={{ color: theme.subtext, fontSize: 16 }}>No previous bets yet.</Text>
-                </View>
-              ) : (
-                userBets
-                  .filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date())
-                  .map((bet, index) => (
-                    <BetCard key={bet.id} bet={bet} userWallet={account?.address} theme={theme} />
-                  ))
-              )
-            )}
-          </>
-        )}
-      </ScrollView>
+      {activeTab === 'live' ? (
+        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
+          <Text style={{ 
+            color: theme.subtext, 
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+          }}>
+            NO LIVE BETS YET.
+          </Text>
+        </View>
+      ) : (
+        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
+          <Text style={{ 
+            color: theme.subtext, 
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+          }}>
+            NO PREVIOUS BETS YET.
+          </Text>
+        </View>
+      )}
 
       {/* Remove tabs and live/previous bets sections */}
       {/* Bottom nav is already present globally */}
