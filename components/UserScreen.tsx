@@ -8,7 +8,6 @@ import {
   useEmbeddedSolanaWallet,
   getUserEmbeddedSolanaWallet,
 } from "@privy-io/expo";
-
 import Constants from "expo-constants";
 import { useLinkWithPasskey } from "@privy-io/expo/passkey";
 import { PrivyUser } from "@privy-io/public-api";
@@ -48,9 +47,6 @@ export const UserScreen = () => {
   const { wallets, create } = useEmbeddedSolanaWallet();
   const account = getUserEmbeddedSolanaWallet(user);
   const [copied, setCopied] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false);
-  const [exportingWallet, setExportingWallet] = useState(false);
-  const [exportedPrivateKey, setExportedPrivateKey] = useState<string | null>(null);
   const [solBalance, setSolBalance] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const router = useRouter();
@@ -174,91 +170,6 @@ export const UserScreen = () => {
     ]).start(() => {
       setShowSettingsModal(false);
     });
-  };
-
-  // Export wallet using REST API
-  const exportWallet = async () => {
-    if (!account?.address) {
-      Alert.alert('Error', 'No wallet address found');
-      return;
-    }
-
-    setExportingWallet(true);
-    try {
-      // Generate a base64-encoded key pair for the recipient
-      const keypair = await crypto?.subtle?.generateKey(
-        {
-          name: "ECDH",
-          namedCurve: "P-256"
-        },
-        true,
-        ["deriveKey", "deriveBits"]
-      );
-      
-      const [publicKey, privateKey] = await Promise.all([
-        crypto.subtle.exportKey("spki", keypair.publicKey),
-        crypto.subtle.exportKey("pkcs8", keypair.privateKey)
-      ]);
-      
-      const [publicKeyBase64, privateKeyBase64] = [
-        Buffer.from(publicKey).toString("base64"),
-        Buffer.from(privateKey).toString("base64")
-      ];
-
-      // Create the signature for the request
-      const input = {
-        headers: {
-          "privy-app-id": "cmdfmgl76001qlh0mi0ggzx5l", // Replace with your actual Privy App ID
-        },
-        method: "POST",
-        url: `https://api.privy.io/v1/wallets/${account.address}/export`,
-        version: 1,
-        body: {
-          encryption_type: "HPKE",
-          recipient_public_key: publicKeyBase64,
-        },
-      };
-
-      // Make the request to export the wallet
-      const res = await fetch(
-        `https://api.privy.io/v1/wallets/${account.address}/export`,
-        {
-          method: input.method,
-          headers: {
-            ...input.headers,
-            "Content-Type": "application/json",
-            Authorization: `Basic ${Buffer.from('your-privy-app-id:your-privy-app-secret').toString('base64')}`, // Replace with actual credentials
-          },
-          body: JSON.stringify(input.body),
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(`Export failed: ${res.status} ${res.statusText}`);
-      }
-
-      const exportData = await res.json();
-      
-      // For now, we'll show the encrypted data
-      // In a real implementation, you'd decrypt this using the HPKE library
-      setExportedPrivateKey(JSON.stringify(exportData, null, 2));
-      
-      Alert.alert(
-        'Export Successful',
-        'Your wallet has been exported. The private key is encrypted and secure.',
-        [{ text: 'OK' }]
-      );
-
-    } catch (error) {
-      console.error('Export error:', error);
-      Alert.alert(
-        'Export Failed',
-        `Failed to export wallet: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setExportingWallet(false);
-    }
   };
 
   // Check if Twitter is already linked
@@ -443,7 +354,7 @@ export const UserScreen = () => {
         {/* QR code removed as requested */}
       </View>
       {/* Deposit button (outside balance card) */}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 18, marginBottom: 8 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 18, marginBottom: 8 }}>
         <RetroButton
           title="RECEIVE"
           onPress={() => setShowReceiveModal(true)}
@@ -456,28 +367,6 @@ export const UserScreen = () => {
           minWidth={120}
           textStyle={{ fontFamily: 'PressStart2P-Regular' }}
         />
-        <TouchableOpacity
-          onPress={() => setShowExportModal(true)}
-          style={{
-            marginLeft: 12,
-            backgroundColor: theme.card,
-            borderRadius: 20,
-            borderWidth: 2,
-            borderColor: theme.border,
-            padding: 8,
-            shadowColor: theme.shadow,
-            shadowOpacity: 0.2,
-            shadowRadius: 3,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: 4,
-            width: 40,
-            height: 40,
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          <MaterialIcons name="more-vert" size={24} color={theme.text} />
-        </TouchableOpacity>
       </View>
 
       {/* Deposit (Receive) Modal */}
@@ -905,160 +794,6 @@ export const UserScreen = () => {
           </Text>
         </View>
       )}
-
-      {/* Export Wallet Modal */}
-      <Modal
-        visible={showExportModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowExportModal(false)}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onPress={() => setShowExportModal(false)}
-        />
-        <View style={{ 
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: theme.modal,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          padding: 28,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: -10 },
-          shadowOpacity: 0.3,
-          shadowRadius: 20,
-          elevation: 20,
-        }}>
-          {/* Handle */}
-          <View style={{
-            width: 40,
-            height: 4,
-            backgroundColor: theme.subtext,
-            borderRadius: 2,
-            alignSelf: 'center',
-            marginBottom: 24,
-          }} />
-          
-          <Text style={{ 
-            fontSize: 18, 
-            fontFamily: 'PressStart2P-Regular',
-            color: theme.green, 
-            marginBottom: 24, 
-            textAlign: 'center',
-            textShadowColor: 'rgba(0,0,0,0.7)',
-            textShadowOffset: { width: 1, height: 1 },
-            textShadowRadius: 0,
-          }}>
-            EXPORT WALLET
-          </Text>
-          <Text style={{ 
-            color: theme.text, 
-            fontSize: 12, 
-            fontFamily: 'PressStart2P-Regular',
-            marginBottom: 16, 
-            textAlign: 'center' 
-          }}>
-            EXPORT YOUR PRIVATE KEY TO USE WITH OTHER WALLETS
-          </Text>
-          <Text style={{ 
-            color: theme.subtext, 
-            fontSize: 10, 
-            fontFamily: 'PressStart2P-Regular',
-            marginBottom: 24, 
-            textAlign: 'center',
-            lineHeight: 16,
-          }}>
-            WARNING: Keep your private key secure. Anyone with access to your private key can control your wallet.
-          </Text>
-          
-          {exportedPrivateKey ? (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={{ 
-                color: theme.text, 
-                fontSize: 10, 
-                fontFamily: 'PressStart2P-Regular',
-                marginBottom: 8, 
-                textAlign: 'center' 
-              }}>
-                ENCRYPTED PRIVATE KEY:
-              </Text>
-              <Text style={{ 
-                color: theme.subtext, 
-                fontSize: 8, 
-                fontFamily: 'PressStart2P-Regular',
-                textAlign: 'center',
-                lineHeight: 12,
-                backgroundColor: theme.input,
-                padding: 8,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: theme.border,
-              }}>
-                {exportedPrivateKey}
-              </Text>
-              <TouchableOpacity
-                onPress={async () => {
-                  await Clipboard.setStringAsync(exportedPrivateKey);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1200);
-                }}
-                style={{ 
-                  marginTop: 8, 
-                  alignSelf: 'center',
-                  backgroundColor: theme.green,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 6,
-                }}
-              >
-                <Text style={{ 
-                  color: '#000000', 
-                  fontSize: 10, 
-                  fontFamily: 'PressStart2P-Regular',
-                  fontWeight: 'bold',
-                }}>
-                  {copied ? 'COPIED!' : 'COPY'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <RetroButton
-              title={exportingWallet ? "EXPORTING..." : "EXPORT PRIVATE KEY"}
-              backgroundColor="#ff4444"
-              textColor="#ffffff"
-              fontSize={12}
-              letterSpacing={0}
-              fontWeight="normal"
-              minHeight={48}
-              minWidth={240}
-              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-              disabled={exportingWallet}
-              onPress={exportWallet}
-            />
-          )}
-          
-          {exportedPrivateKey && (
-            <RetroButton
-              title="EXPORT NEW KEY"
-              backgroundColor="#4ed620"
-              textColor="#000000"
-              fontSize={12}
-              letterSpacing={0}
-              fontWeight="normal"
-              minHeight={48}
-              minWidth={240}
-              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-              onPress={() => {
-                setExportedPrivateKey(null);
-                exportWallet();
-              }}
-            />
-          )}
-        </View>
-      </Modal>
 
       {/* Remove tabs and live/previous bets sections */}
       {/* Bottom nav is already present globally */}
