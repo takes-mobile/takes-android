@@ -18,11 +18,11 @@ export default function BottomNav() {
   };
   
   const darkTheme = {
-    background: '#232323',
-    border: '#333',
-    shadow: '#000',
-    active: '#22c55e',
-    inactive: '#666',
+    background: '#2d2640', // Medium-dark purple background
+    border: '#4a3f66', // Medium purple border
+    shadow: '#130f1c', // Very dark purple shadow
+    active: '#8b5cf6', // Bright purple active
+    inactive: '#8778b3', // Medium-light purple inactive
   };
   
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
@@ -38,31 +38,87 @@ export default function BottomNav() {
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 32,
-        paddingVertical: 14,
-        backgroundColor: theme.background,
-        borderRadius: 32,
+        paddingVertical: 16,
+        backgroundColor: themeName === 'dark' ? 'rgba(45, 38, 64, 0.95)' : theme.background, // Semi-transparent for dark mode
+        borderRadius: 30,
         marginHorizontal: 18,
-        borderWidth: 3,
+        borderWidth: 2,
         borderColor: theme.border,
         shadowColor: theme.shadow,
-        shadowOpacity: 0.12,
-        shadowRadius: 14,
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
         shadowOffset: { width: 0, height: 4 },
-        elevation: 12,
+        elevation: 15,
         zIndex: 100,
+        // Added subtle glow effect for dark mode
+        ...(themeName === 'dark' ? {
+          shadowColor: '#8b5cf6',
+          shadowOpacity: 0.15,
+          shadowRadius: 12,
+        } : {})
       }}
     >
-      {/* Plus button */}
-      <TouchableOpacity style={{ alignItems: 'center', justifyContent: 'center' }} onPress={() => router.push('/create-bet')}>
-        <MaterialIcons name="add-circle" size={34} color={pathname === '/create-bet' ? theme.active : theme.inactive} style={{ borderWidth: 2, borderColor: theme.border, borderRadius: 17, backgroundColor: theme.background }} />
+      {/* Create bet button */}
+      <TouchableOpacity 
+        style={{ 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          backgroundColor: pathname === '/create-bet' ? 
+            themeName === 'dark' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)' : 
+            'transparent'
+        }} 
+        onPress={() => router.push('/create-bet')}
+      >
+        <MaterialIcons 
+          name="add-circle" 
+          size={30} 
+          color={pathname === '/create-bet' ? theme.active : theme.inactive} 
+        />
       </TouchableOpacity>
-      {/* Middle scroll/list button */}
-      <TouchableOpacity style={{ alignItems: 'center', justifyContent: 'center' }} onPress={() => router.push('/live-bets')}>
-        <MaterialCommunityIcons name="view-list" size={32} color={pathname === '/live-bets' ? theme.active : theme.inactive} style={{ borderWidth: 2, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.background }} />
+      
+      {/* Live bets button */}
+      <TouchableOpacity 
+        style={{ 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          backgroundColor: pathname === '/live-bets' ? 
+            themeName === 'dark' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)' : 
+            'transparent'
+        }} 
+        onPress={() => router.push('/live-bets')}
+      >
+        <MaterialCommunityIcons 
+          name="view-carousel" 
+          size={28} 
+          color={pathname === '/live-bets' ? theme.active : theme.inactive} 
+        />
       </TouchableOpacity>
-      {/* Profile button (active if on user screen) */}
-      <TouchableOpacity style={{ alignItems: 'center', justifyContent: 'center' }} onPress={() => router.push('/') }>
-        <MaterialIcons name="person" size={32} color={pathname === '/' ? theme.active : theme.inactive} style={{ borderWidth: 2, borderColor: theme.border, borderRadius: 16, backgroundColor: theme.background }} />
+      
+      {/* Profile button */}
+      <TouchableOpacity 
+        style={{ 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          width: 50,
+          height: 50,
+          borderRadius: 25,
+          backgroundColor: pathname === '/' ? 
+            themeName === 'dark' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(139, 92, 246, 0.1)' : 
+            'transparent'
+        }} 
+        onPress={() => router.push('/')}
+      >
+        <MaterialIcons 
+          name="person" 
+          size={28} 
+          color={pathname === '/' ? theme.active : theme.inactive} 
+        />
       </TouchableOpacity>
     </View>
   );

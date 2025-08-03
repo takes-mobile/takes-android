@@ -1,9 +1,13 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Image, Alert, Animated, Modal, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { ThemeContext } from './_layout';
+import RetroButton from '../components/RetroButton';
+import { useBets } from '../context/BetsContext';
+
+const BET_GREEN = '#29d620';
 
 export default function CreateBetScreen() {
   const [description, setDescription] = useState('');
@@ -17,6 +21,15 @@ export default function CreateBetScreen() {
   const [iconScale] = useState(new Animated.Value(1));
   const router = useRouter();
   const { theme: themeName } = useContext(ThemeContext);
+  const { fetchBets, lastFetched } = useBets();
+  
+  // Prefetch bets in the background if needed
+  useEffect(() => {
+    // Only fetch if we haven't fetched in the last 5 minutes
+    if (!lastFetched || (new Date().getTime() - lastFetched.getTime() > 300000)) {
+      fetchBets();
+    }
+  }, []);
 
   const lightTheme = {
     background: '#f6f8fa',
@@ -24,7 +37,7 @@ export default function CreateBetScreen() {
     text: '#222',
     subtext: '#666',
     border: '#e5e7eb',
-    green: '#22c55e',
+    green: BET_GREEN,
     shadow: '#000',
     placeholder: '#9ca3af',
     accent: '#3b82f6',
@@ -33,15 +46,15 @@ export default function CreateBetScreen() {
   };
 
   const darkTheme = {
-    background: '#18181b',
-    card: '#232323',
+    background: '#1e1a2c', // Dark purple background
+    card: '#2d2640', // Medium-dark purple card
     text: '#fff',
-    subtext: '#bbb',
-    border: '#333',
-    green: '#22c55e',
-    shadow: '#000',
-    placeholder: '#666',
-    accent: '#3b82f6',
+    subtext: '#c8b6e8', // Light purple subtext
+    border: '#4a3f66', // Medium purple border
+    green: BET_GREEN,
+    shadow: '#130f1c', // Very dark purple shadow
+    placeholder: '#8778b3', // Medium-light purple placeholder
+    accent: '#8b5cf6', // Brighter purple accent
     warning: '#f59e0b',
     success: '#10b981',
   };
@@ -165,139 +178,220 @@ export default function CreateBetScreen() {
     });
   };
 
-
-
-
-
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
       {/* Header with Creation Incentives */}
-      <View style={{ marginBottom: 20 }}>
+      <View style={{ marginBottom: 20, marginTop: 20 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <Text style={{ 
-            fontSize: 36, 
-            fontWeight: 'bold', 
-            color: theme.green, 
-          }}>
-            whats ur take?
-          </Text>
-          
-          {/* Notification Icon */}
+          <View style={{ position: 'relative' }}>
+            {/* Retro pixel art title */}
+            <View>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontFamily: 'PressStart2P-Regular',
+                  color: theme.green,
+                  zIndex: 1,
+                  textShadowColor: 'rgba(0,0,0,0.7)',
+                  textShadowOffset: { width: 2, height: 2 },
+                  textShadowRadius: 0,
+                  textTransform: 'uppercase',
+                  textAlign: 'left',
+                }}
+              >
+                WHAT'S ur
+              </Text>
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontFamily: 'PressStart2P-Regular',
+                  color: theme.green,
+                  zIndex: 1,
+                  textShadowColor: 'rgba(0,0,0,0.7)',
+                  textShadowOffset: { width: 2, height: 2 },
+                  textShadowRadius: 0,
+                  textTransform: 'uppercase',
+                  paddingTop: 10,
+                  textAlign: 'left',
+                }}
+              >
+                viral TAKE?
+              </Text>
+            </View>
+          </View>
+          {/* Notification Icon - Retro Style */}
           <TouchableOpacity
             onPress={handleRewardsPress}
             style={{
               backgroundColor: '#FFD600',
-              borderRadius: 20,
-              width: 40,
-              height: 40,
-              justifyContent: 'center',
-              alignItems: 'center',
-              shadowColor: theme.shadow,
-              shadowOpacity: 0.2,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 4,
               borderWidth: 2,
-              borderColor: 'black',
-              position: 'relative',
+              borderColor: '#b8860b',
+              borderRadius: 8,
+              paddingVertical: 2,
+              paddingHorizontal: 2,
+              flexDirection: 'row',
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.3,
+              shadowRadius: 2,
+              elevation: 3,
             }}
           >
-            <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-              <MaterialIcons name="emoji-events" size={24} color="#b8860b" />
+            <Animated.View style={{ 
+              transform: [{ scale: iconScale }],
+              marginRight: 2,
+              marginTop: 2,
+              marginBottom: 2,
+              marginLeft: 2,
+              paddingLeft: 4
+            }}>
+              <MaterialIcons name="emoji-events" size={16} color="#b8860b" />
             </Animated.View>
-            
             {/* Red Exclamation Badge */}
             <View style={{
               position: 'absolute',
-              top: -2,
-              right: -2,
+              top: -5,
+              right: -5,
+              backgroundColor: '#FF4444',
+              width: 12,
+              height: 12,
+              borderRadius: 6,
               justifyContent: 'center',
               alignItems: 'center',
-            }}>
-              <Text style={{ 
-                color: '#FF4444', 
-                fontSize: 16, 
-                fontWeight: 'bold',
-                textAlign: 'center',
-                lineHeight: 16,
-                textShadowColor: '#000',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-              }}>
-                !
-              </Text>
-            </View>
+              borderWidth: 1,
+              borderColor: '#fff',
+            }} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Main Question Input */}
+      {/* Main Question Input - Retro Style */}
       <View style={{ marginBottom: 24, marginTop: 24 }}>
-        {/* <Text style={{ fontSize: 21, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
-          What's your burning opinion?
-        </Text> */}
-        <TextInput 
-          placeholder="e.g., Will Apple stock go up today?" 
-          value={description} 
-          onChangeText={setDescription}
-          style={{
-            backgroundColor: theme.card,
-            borderRadius: 16,
-            padding: 16,
-            fontSize: 16,
-            borderWidth: 2,
-            borderColor: theme.border,
-            color: theme.text,
-            minHeight: 80,
-          }}
-          multiline
-          numberOfLines={3}
-          placeholderTextColor={theme.placeholder}
-        />
-      </View>
-
-      {/* Answer Options */}
-      <View style={{ marginBottom: 24 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
-          Answer Options
+        <Text style={{ 
+          fontSize: 14, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.text, 
+          marginBottom: 12,
+          textTransform: 'uppercase'
+        }}>
+          YOUR QUESTION:
         </Text>
+        <View style={{
+          backgroundColor: theme.card,
+          borderWidth: 3,
+          borderColor: theme.border,
+          padding: 2, // Thin padding for pixel border effect
+        }}>
+          <TextInput 
+            placeholder="e.g., Will Apple stock go up today?" 
+            value={description} 
+            onChangeText={setDescription}
+            style={{
+              backgroundColor: theme.card,
+              padding: 18,
+              fontSize: 22,
+              fontWeight: '600',
+              color: theme.text,
+              minHeight: 100,
+            }}
+            multiline
+            numberOfLines={3}
+            placeholderTextColor={theme.placeholder}
+          />
+        </View>
         {answers.map((ans, idx) => (
-          <View key={idx} style={{ marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text, flex: 1 }}>
-                Option {idx + 1}
+          <View  key={idx} style={{ marginBottom: 16, marginTop: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ 
+                fontSize: 14, 
+                fontFamily: 'PressStart2P-Regular',
+                color: theme.text, 
+                flex: 1 
+              }}>
+                OPTION {idx + 1}
               </Text>
-              <TouchableOpacity
-                onPress={() => toggleAnswerType(idx)}
-                style={{
-                  backgroundColor: answerTypes[idx] === 'text' ? theme.green : theme.subtext,
-                  borderRadius: 8,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                }}
-              >
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>
-                  {answerTypes[idx] === 'text' ? 'TEXT' : 'IMAGE'}
-                </Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity 
+                  onPress={() => toggleAnswerType(idx)} 
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderWidth: 2,
+                    borderRadius: 12,
+                    borderColor: answerTypes[idx] === 'text' ? theme.green : theme.border,
+                    backgroundColor: answerTypes[idx] === 'text' ? 'rgba(78, 214, 32, 0.2)' : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  }}
+                >
+                  <MaterialIcons 
+                    name="text-fields" 
+                    size={16} 
+                    color={answerTypes[idx] === 'text' ? theme.green : theme.subtext} 
+                  />
+                  <Text style={{ 
+                    marginLeft: 4,
+                    fontSize: 10,
+                    fontFamily: 'PressStart2P-Regular',
+                    color: answerTypes[idx] === 'text' ? theme.green : theme.subtext
+                  }}>
+                    TEXT
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  onPress={() => toggleAnswerType(idx)}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderWidth: 2,
+                    borderRadius: 12,
+                    borderColor: answerTypes[idx] === 'image' ? theme.green : theme.border,
+                    backgroundColor: answerTypes[idx] === 'image' ? 'rgba(78, 214, 32, 0.2)' : 'transparent',
+                    flexDirection: 'row',
+                    alignItems: 'center'
+                  }}
+                >
+                  <MaterialIcons 
+                    name="image" 
+                    size={16} 
+                    color={answerTypes[idx] === 'image' ? theme.green : theme.subtext} 
+                  />
+                  <Text style={{ 
+                    marginLeft: 4,
+                    fontSize: 10,
+                    fontFamily: 'PressStart2P-Regular',
+                    color: answerTypes[idx] === 'image' ? theme.green : theme.subtext
+                  }}>
+                    IMAGE
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            
+
+            {/* Show only the selected input type */}
             {answerTypes[idx] === 'text' ? (
-              <TextInput 
-                placeholder={`Option ${idx + 1}`} 
-                value={ans} 
-                onChangeText={text => setAnswers(a => a.map((v, i) => (i === idx ? text : v)))}
-                style={{
-                  backgroundColor: theme.card,
-                  borderRadius: 12,
-                  padding: 16,
-                  fontSize: 16,
-                  borderWidth: 2,
-                  borderColor: theme.border,
-                  color: theme.text,
-                }}
-                placeholderTextColor={theme.placeholder}
-              />
+              <View style={{
+                backgroundColor: theme.card,
+                borderWidth: 3,
+                borderColor: theme.green,
+                padding: 2,
+              }}>
+                <TextInput 
+                  placeholder={`Option ${idx + 1}`} 
+                  value={ans} 
+                  onChangeText={text => setAnswers(a => a.map((v, i) => (i === idx ? text : v)))}
+                  style={{
+                    backgroundColor: theme.card,
+                    padding: 16,
+                    fontSize: 22,
+                    color: theme.text,
+                    fontWeight: '600',
+                  }}
+                  placeholderTextColor={theme.placeholder}
+                />
+              </View>
             ) : (
               <View style={{ alignItems: 'center' }}>
                 {answerImages[idx] ? (
@@ -309,7 +403,7 @@ export default function CreateBetScreen() {
                         height: 120, 
                         borderRadius: 12,
                         borderWidth: 2,
-                        borderColor: theme.border,
+                        borderColor: theme.green,
                       }} 
                     />
                     <TouchableOpacity
@@ -333,16 +427,23 @@ export default function CreateBetScreen() {
                       width: 120,
                       height: 120,
                       backgroundColor: theme.card,
-                      borderRadius: 12,
-                      borderWidth: 2,
-                      borderColor: theme.border,
+                      borderWidth: 3,
+                      borderColor: theme.green,
                       borderStyle: 'dashed',
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}
                   >
                     <MaterialIcons name="add-photo-alternate" size={32} color={theme.placeholder} />
-                    <Text style={{ color: theme.placeholder, fontSize: 12, marginTop: 4 }}>Add Image</Text>
+                    <Text style={{ 
+                      color: theme.placeholder, 
+                      fontSize: 10, 
+                      marginTop: 4,
+                      fontFamily: 'PressStart2P-Regular',
+                      textTransform: 'uppercase'
+                    }}>
+                      Add Image
+                    </Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -351,18 +452,17 @@ export default function CreateBetScreen() {
         ))}
       </View>
 
-      {/* Advanced Options Toggle */}
+      {/* Advanced Options Toggle - Retro Style */}
       <TouchableOpacity
         onPress={() => setShowAdvanced(!showAdvanced)}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           backgroundColor: theme.card,
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 20,
-          borderWidth: 2,
+          borderWidth: 3,
           borderColor: theme.border,
+          padding: 14,
+          marginBottom: 20,
         }}
       >
         <Image 
@@ -370,8 +470,14 @@ export default function CreateBetScreen() {
           style={{ width: 20, height: 20 }}
           resizeMode="contain"
         />
-        <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text, marginLeft: 12, flex: 1 }}>
-          Custom options
+        <Text style={{ 
+          fontSize: 14, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.text, 
+          marginLeft: 12, 
+          flex: 1 
+        }}>
+          CUSTOM OPTIONS
         </Text>
         <MaterialIcons 
           name={showAdvanced ? "expand-less" : "expand-more"} 
@@ -385,8 +491,14 @@ export default function CreateBetScreen() {
         <View style={{ marginBottom: 24 }}>
           {/* Bet Duration */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
-              Duration
+            <Text style={{ 
+              fontSize: 14, 
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.text, 
+              marginBottom: 12,
+              textTransform: 'uppercase'
+            }}>
+              DURATION
             </Text>
             <ScrollView 
               horizontal 
@@ -395,28 +507,19 @@ export default function CreateBetScreen() {
             >
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {timeOptions.map((option) => (
-                  <TouchableOpacity
+                  <RetroButton
                     key={option.hours}
+                    title={option.label}
                     onPress={() => setBetDuration(option.hours.toString())}
-                    style={{
-                      backgroundColor: betDuration === option.hours.toString() ? option.color : theme.card,
-                      borderRadius: 16,
-                      padding: 12,
-                      borderWidth: 2,
-                      borderColor: betDuration === option.hours.toString() ? option.color : theme.border,
-                      alignItems: 'center',
-                      minWidth: 80,
-                    }}
-                  >
-               
-                    <Text style={{ 
-                      fontSize: 14, 
-                      fontWeight: 'bold', 
-                      color: betDuration === option.hours.toString() ? '#fff' : theme.text,
-                    }}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
+                    backgroundColor={betDuration === option.hours.toString() ? option.color : theme.card}
+                    textColor={betDuration === option.hours.toString() ? '#fff' : theme.text}
+                    fontSize={12}
+                    letterSpacing={0}
+                    fontWeight="normal"
+                    minHeight={40}
+                    minWidth={80}
+                    textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+                  />
                 ))}
               </View>
             </ScrollView>
@@ -424,8 +527,14 @@ export default function CreateBetScreen() {
 
           {/* Bet Amount */}
           <View style={{ marginBottom: 20 }}>
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text, marginBottom: 12 }}>
-              Entry Fee
+            <Text style={{ 
+              fontSize: 14, 
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.text, 
+              marginBottom: 12,
+              textTransform: 'uppercase'
+            }}>
+              ENTRY FEE
             </Text>
             <ScrollView 
               horizontal 
@@ -434,33 +543,28 @@ export default function CreateBetScreen() {
             >
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {amountOptions.map((option) => (
-                  <TouchableOpacity
+                  <RetroButton
                     key={option.amount}
+                    title={`${option.amount} SOL`}
                     onPress={() => setBetAmount(option.amount.toString())}
-                    style={{
-                      backgroundColor: betAmount === option.amount.toString() ? option.color : theme.card,
-                      borderRadius: 16,
-                      padding: 12,
-                      borderWidth: 2,
-                      borderColor: betAmount === option.amount.toString() ? option.color : theme.border,
-                      alignItems: 'center',
-                      minWidth: 80,
-                    }}
+                    backgroundColor={betAmount === option.amount.toString() ? option.color : theme.card}
+                    textColor={betAmount === option.amount.toString() ? '#fff' : theme.text}
+                    fontSize={12}
+                    letterSpacing={0}
+                    fontWeight="normal"
+                    minHeight={40}
+                    minWidth={80}
+                    textStyle={{ fontFamily: 'PressStart2P-Regular' }}
                   >
                     <Text style={{ 
-                      fontSize: 14, 
-                      fontWeight: 'bold', 
-                      color: betAmount === option.amount.toString() ? '#fff' : theme.text,
-                    }}>
-                      {option.amount} SOL
-                    </Text>
-                    <Text style={{ 
                       fontSize: 10, 
+                      fontFamily: 'PressStart2P-Regular',
                       color: betAmount === option.amount.toString() ? '#fff' : theme.subtext,
+                      marginTop: 4
                     }}>
                       {option.label}
                     </Text>
-                  </TouchableOpacity>
+                  </RetroButton>
                 ))}
               </View>
             </ScrollView>
@@ -468,28 +572,20 @@ export default function CreateBetScreen() {
         </View>
       )}
 
-      {/* Create Button */}
-      <TouchableOpacity
+      {/* Create Button - Retro Style */}
+      <RetroButton
+        title="SHOW BET"
         onPress={handleShowBet}
-        style={{
-          backgroundColor: theme.green,
-          borderRadius: 20,
-          paddingVertical: 16,
-          paddingHorizontal: 32,
-          alignItems: 'center',
-          shadowColor: theme.shadow,
-          shadowOpacity: 0.15,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 4 },
-          elevation: 6,
-          borderWidth: 2,
-          borderColor: 'black',
-        }}
-      >
-        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, letterSpacing: 1 }}>
-          Show Bet 
-        </Text>
-      </TouchableOpacity>
+        backgroundColor={BET_GREEN}
+        textColor="#000000"
+        fontSize={16}
+        letterSpacing={0}
+        fontWeight="normal"
+        minHeight={56}
+        minWidth={240}
+        textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+        style={{ alignSelf: 'center' }}
+      />
 
       {/* Creator Rewards Modal Popup */}
       <Modal
@@ -507,7 +603,7 @@ export default function CreateBetScreen() {
           top: '20%',
           left: 20,
           right: 20,
-          backgroundColor: theme.green,
+          backgroundColor: themeName === 'dark' ? '#2d2640' : '#fff',
           borderRadius: 20,
           padding: 24,
           shadowColor: theme.shadow,
@@ -523,7 +619,7 @@ export default function CreateBetScreen() {
               position: 'absolute',
               top: 16,
               right: 16,
-              backgroundColor: 'rgba(255,255,255,0.2)',
+              backgroundColor: themeName === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.2)',
               borderRadius: 16,
               width: 32,
               height: 32,
@@ -537,7 +633,7 @@ export default function CreateBetScreen() {
           {/* Trophy Icon */}
           <View style={{
             alignSelf: 'center',
-            backgroundColor: 'rgba(255,255,255,0.2)',
+            backgroundColor: themeName === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.2)',
             borderRadius: 30,
             width: 60,
             height: 60,
@@ -548,8 +644,17 @@ export default function CreateBetScreen() {
             <MaterialIcons name="emoji-events" size={32} color="#fff" />
           </View>
 
-          <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 16 }}>
-            🏆 Creator Rewards
+          <Text style={{ 
+            fontSize: 18, 
+            fontFamily: 'PressStart2P-Regular',
+            color: '#fff', 
+            textAlign: 'center', 
+            marginBottom: 16,
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            🏆 CREATOR REWARDS
           </Text>
           
           <Text style={{ fontSize: 16, color: '#fff', marginBottom: 16, lineHeight: 24, textAlign: 'center', opacity: 0.95 }}>
@@ -564,19 +669,7 @@ export default function CreateBetScreen() {
             </Text>
           </View>
 
-          <View style={{ 
-            backgroundColor: '#fff', 
-            borderRadius: 16, 
-            padding: 16,
-            alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: 12, color: theme.green, fontWeight: '600', marginBottom: 4 }}>
-              POTENTIAL EARNINGS
-            </Text>
-            <Text style={{ fontSize: 24, color: theme.green, fontWeight: 'bold' }}>
-              +{calculatePotentialEarnings()} SOL
-            </Text>
-          </View>
+         
         </View>
       </Modal>
     </ScrollView>

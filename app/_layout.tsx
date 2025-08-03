@@ -5,17 +5,30 @@ import Constants from 'expo-constants';
 import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from 'react-native-toast-message';
+import { useFonts } from 'expo-font';
+import { BetsProvider } from '../context/BetsContext';
 
 export const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} });
 
 export default function Layout() {
+  const [fontsLoaded] = useFonts({
+    'PressStart2P-Regular': require('../assets/fonts/PressStart2P-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return null; // Return null or a loading screen while fonts are loading
+  }
+
   return (
     <PrivyProvider
-      appId={Constants.expoConfig?.extra?.privyAppId}
-      clientId={Constants.expoConfig?.extra?.privyClientId}
+      appId="cmdfmgl76001qlh0mi0ggzx5l"
+      clientId="client-WY6NvgKMnByoyauWRNvgPku7dBs3VtJeYxseJm48kDUtk"
     >
       <ThemeProvider>
-        <LayoutWithNav />
+        <BetsProvider>
+          <LayoutWithNav />
+        </BetsProvider>
       </ThemeProvider>
     </PrivyProvider>
   );
@@ -85,9 +98,9 @@ function LayoutWithNav() {
   };
   
   const darkTheme = {
-    background: '#18181b',
+    background: '#1e1a2c', // Dark purple background
     text: '#fff',
-    border: '#333',
+    border: '#4a3f66', // Medium purple border
   };
   
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
@@ -110,9 +123,10 @@ function LayoutWithNav() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="create-bet" options={{ title: 'Create Bet' }} />
-        <Stack.Screen name="live-bets" options={{ title: 'Live Bets' }} />
+        <Stack.Screen name="live-bets" options={{ headerShown: false }} />
       </Stack>
       {user && <BottomNav />}
+      <Toast />
     </>
   );
 }
