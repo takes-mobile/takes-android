@@ -586,7 +586,8 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
     // Only process Phantom-related deep links
     if (!urlObj.pathname.includes("onConnect") && 
         !urlObj.pathname.includes("onDisconnect") && 
-        !urlObj.pathname.includes("onSignAndSendTransaction")) {
+        !urlObj.pathname.includes("onSignAndSendTransaction") &&
+        !urlObj.pathname.includes("onSignTransaction")) {
       console.log("Ignoring non-Phantom deep link");
       return;
     }
@@ -701,29 +702,38 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
       }
     }
 
-    // Handle sign transaction response
+    // Handle sign transaction response - send signed transaction on-chain
     if (urlObj.pathname.includes("onSignTransaction")) {
       console.log("Processing Phantom sign transaction response");
+      console.log("Debug - sharedSecret available:", !!sharedSecret);
+      console.log("Debug - sharedSecret length:", sharedSecret?.length);
       
       const nonce = params.get("nonce");
       const data = params.get("data");
       
+      console.log("Debug - nonce:", nonce);
+      console.log("Debug - data length:", data?.length);
+      
       if (nonce && data && sharedSecret) {
         try {
+          console.log("Decrypting signed transaction data...");
+          
           // Decrypt the signed transaction data
           const signedData = decryptPayload(data, nonce, sharedSecret);
           
-          console.log("Successfully decrypted signed transaction data");
+          console.log("Successfully decrypted signed transaction data:", signedData);
           
           // The signedData should contain the signed transaction
           const signedTransaction = VersionedTransaction.deserialize(
             bs58.decode(signedData.transaction)
           );
           
+          console.log("Deserialized signed transaction, sending to network...");
+          
           // Now send the signed transaction to the network
           const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
           
-          const signature =  connection.sendTransaction(signedTransaction, {
+          const signature = await connection.sendTransaction(signedTransaction, {
             skipPreflight: false,
             preflightCommitment: 'confirmed',
           });
@@ -732,7 +742,7 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
           
           Alert.alert(
             "Transaction Successful! 🎉",
-            `Transaction completed with signature: ${ (await signature).slice(0, 8)}...`,
+            `SOL transfer completed with signature: ${signature.slice(0, 8)}...`,
             [
               {
                 text: "View on Explorer",
@@ -761,12 +771,14 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
       }
     }
 
+
+
   } catch (error) {
     console.error("Error processing deep link:", error);
     setConnectingToPhantom(false);
     Alert.alert("Deeplink Error", "Failed to process wallet response");
   }
-}, [dappKeyPair.secretKey, account?.address, fetchBalance]);
+}, [dappKeyPair.secretKey, account?.address, fetchBalance, sharedSecret]);
 
 // 3. Fix the connection function - ensure proper key generation
 const connectToPhantom = useCallback(async () => {

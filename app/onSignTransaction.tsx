@@ -14,7 +14,7 @@ export default function onSignTransaction() {
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e1a2c' }}>
       <Text style={{ color: '#fff', fontSize: 16, fontFamily: 'PressStart2P-Regular' }}>
-        Processing Phantom connection...
+      Press Back to go back to the main screen
       </Text>
     </View>
   );
