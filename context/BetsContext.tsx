@@ -7,7 +7,7 @@ export interface Bet {
   options: string[];
   tokenAddresses: string[];
   solAmount: number;
-  duration: number;
+  duration: number | null;
   userWallet: string;
   creatorName: string;
   category: string;
@@ -20,7 +20,9 @@ export interface Bet {
   transactions: any[];
   status: string;
   winner: string | null;
-  endTime: string;
+  endTime: string | null;
+  generatedImage?: string;
+  betType?: 'standard' | 'bonk' | 'timeless';
 }
 
 interface BetsContextType {

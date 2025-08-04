@@ -13,7 +13,11 @@ import { useLinkWithPasskey } from "@privy-io/expo/passkey";
 import { PrivyUser } from "@privy-io/public-api";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from '@solana/web3.js';
+import * as Linking from 'expo-linking';
+import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, VersionedTransaction } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
 import { useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-styled';
 import { BN } from '@project-serum/anchor';
@@ -39,6 +43,316 @@ const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
   return x.type;
 };
 
+// BetCard component for user's bets
+const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: { 
+  bet: any; 
+  userWallet: string | undefined; 
+  theme: any;
+  onEndPosition: (bet: any, participation: any) => void;
+  endingPosition: string | null;
+}) => {
+  const router = useRouter();
+  const [hasTokens, setHasTokens] = useState<boolean | null>(null);
+  const [checkingTokens, setCheckingTokens] = useState(false);
+  
+  const formatTimeLeft = (endTime: string) => {
+    const end = new Date(endTime);
+    const now = new Date();
+    const diff = end.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Ended';
+    
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return `${hours}h ${minutes}m`;
+  };
+
+  // Find user's participation in this bet
+  const userParticipation = bet.participants?.find((p: any) => p.wallet === userWallet);
+  const userOption = userParticipation ? bet.options[userParticipation.optionIndex] : null;
+  const userBetAmount = userParticipation ? userParticipation.amount : 0;
+
+  const isExpired = bet.betType !== 'timeless' && new Date(bet.endTime || '') <= new Date();
+  const isEnding = endingPosition === bet.id;
+
+  // Check if user has tokens for this bet using Jupiter Ultra API
+  const checkTokenBalance = async () => {
+    if (!userWallet || !userParticipation) return;
+    
+    setCheckingTokens(true);
+    try {
+      const tokenMint = bet.tokenAddresses[userParticipation.optionIndex];
+      
+      const response = await fetch(`https://ultra-api.jup.ag/balances/${userWallet}`);
+      
+      if (!response.ok) {
+        setHasTokens(false);
+        return;
+      }
+      
+      const balances = await response.json();
+      
+      if (balances[tokenMint] && balances[tokenMint].uiAmount > 0) {
+        setHasTokens(true);
+      } else {
+        setHasTokens(false);
+      }
+    } catch (error) {
+      console.error('Error checking token balance:', error);
+      setHasTokens(false);
+    } finally {
+      setCheckingTokens(false);
+    }
+  };
+
+  useEffect(() => {
+    checkTokenBalance();
+  }, [userWallet, bet.id]);
+
+  return (
+    <View style={{
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      padding: 18,
+      marginHorizontal: 18,
+      marginBottom: 16,
+      borderWidth: 2,
+      borderColor: theme.border,
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 3,
+    }}>
+      {/* Bet Type Badge */}
+      {bet.betType && (
+        <View style={{
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          backgroundColor: bet.betType === 'bonk' ? '#F97316' : 
+                         bet.betType === 'timeless' ? '#8b5cf6' : '#22c55e',
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: '#fff',
+        }}>
+          <Text style={{
+            fontSize: 8,
+            fontFamily: 'PressStart2P-Regular',
+            color: '#fff',
+            textTransform: 'uppercase',
+          }}>
+            {bet.betType === 'bonk' ? '🪙 BONK' : 
+             bet.betType === 'timeless' ? '♾️ TIMELESS' : '🎯 STANDARD'}
+          </Text>
+        </View>
+      )}
+
+      {/* Generated Image Display */}
+      {bet.generatedImage && (
+        <View style={{ marginBottom: 12 }}>
+          <Image 
+            source={{ uri: bet.generatedImage }} 
+            style={{ 
+              width: '100%', 
+              height: 120, 
+              borderRadius: 8,
+            }} 
+            resizeMode="cover"
+          />
+        </View>
+      )}
+
+      {/* Question */}
+      <Text style={{
+        fontSize: 16,
+        fontFamily: 'PressStart2P-Regular',
+        color: theme.text,
+        marginBottom: 12,
+        lineHeight: 22,
+      }}>
+        {bet.question}
+      </Text>
+
+      {/* User's bet info */}
+      <View style={{
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: theme.green + '40',
+      }}>
+        <Text style={{
+          fontSize: 14,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.green,
+          fontWeight: '600',
+          marginBottom: 4,
+        }}>
+          Your Bet: {userOption}
+        </Text>
+        <Text style={{
+          fontSize: 16,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.text,
+          fontWeight: 'bold',
+        }}>
+          Amount: {userBetAmount} {bet.betType === 'bonk' ? 'BONK' : 'SOL'}
+        </Text>
+      </View>
+
+      {/* Status and stats */}
+      <View style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {/* <View style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: bet.isActive && !isExpired ? theme.green : '#ef4444',
+            marginRight: 6,
+          }} /> */}
+          {/* <Text style={{
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+            color: bet.isActive && !isExpired ? theme.green : '#ef4444',
+            fontWeight: '600',
+          }}>
+            {bet.isActive && !isExpired ? 'Active' : 'Ended'}
+          </Text> */}
+        </View>
+        
+        <Text style={{
+          fontSize: 12,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.subtext,
+        }}>
+          Pool: {bet.betType === 'bonk' ? 
+            `${(bet.totalPool * 1).toFixed(0)} BONK` : 
+            `${bet.totalPool.toFixed(2)} SOL`}
+        </Text>
+        
+        {/* <Text style={{
+          fontSize: 12,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.subtext,
+        }}>
+          {bet.betType === 'timeless' ? 'TIMELESS' : formatTimeLeft(bet.endTime || '')}
+        </Text> */}
+      </View>
+
+      {/* Action buttons */}
+      <View style={{
+        flexDirection: 'row',
+        gap: 8,
+      }}>
+        {/* <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: theme.primary || '#3B82F6',
+            borderRadius: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            alignItems: 'center',
+            opacity: isEnding ? 0.7 : 1,
+          }}
+          onPress={() => {
+            router.push({
+              pathname: '/bet-details',
+              params: { betData: JSON.stringify(bet) }
+            });
+          }}
+          disabled={isEnding}
+        >
+          <Text style={{
+            color: '#fff',
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+            fontWeight: '600',
+          }}>
+            View Details
+          </Text>
+        </TouchableOpacity> */}
+
+        {/* Show End Position button only if user has tokens */}
+        {hasTokens === true && (
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: theme.orange || '#F97316',
+              borderRadius: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              alignItems: 'center',
+              opacity: isEnding ? 0.7 : 1,
+            }}
+            onPress={() => onEndPosition(bet, userParticipation)}
+            disabled={isEnding}
+          >
+            {isEnding ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={{
+                color: '#fff',
+                fontSize: 12,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: '600',
+              }}>
+                End Position
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Show Withdrawn status if user has no tokens */}
+        {hasTokens === false && (
+          <View style={{
+            flex: 1,
+            backgroundColor: '#6B7280',
+            borderRadius: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            alignItems: 'center',
+            opacity: 0.7,
+          }}>
+            <Text style={{
+              color: '#fff',
+              fontSize: 12,
+              fontFamily: 'PressStart2P-Regular',
+              fontWeight: '600',
+            }}>
+              Withdrawn
+            </Text>
+          </View>
+        )}
+
+        {/* Show loading while checking tokens */}
+        {hasTokens === null && checkingTokens && (
+          <View style={{
+            flex: 1,
+            backgroundColor: '#6B7280',
+            borderRadius: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            alignItems: 'center',
+            opacity: 0.7,
+          }}>
+            <ActivityIndicator color="#fff" size="small" />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
 export const UserScreen = () => {
   // Remove signedMessages and signMessage logic
   const { logout, user } = usePrivy();
@@ -48,17 +362,35 @@ export const UserScreen = () => {
   const account = getUserEmbeddedSolanaWallet(user);
   const [copied, setCopied] = useState(false);
   const [solBalance, setSolBalance] = useState<string | null>(null);
+  const [bonkBalance, setBonkBalance] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const router = useRouter();
   const [showSendModal, setShowSendModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showAddFundsModal, setShowAddFundsModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [addFundsAmount, setAddFundsAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawAddress, setWithdrawAddress] = useState('');
+  const [withdrawToken, setWithdrawToken] = useState<'SOL' | 'BONK'>('SOL');
   const [sendAddress, setSendAddress] = useState('');
   const [sendAmount, setSendAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [sendSuccess, setSendSuccess] = useState('');
+  
+  // Phantom connection state
+  const [dappKeyPair] = useState(nacl.box.keyPair());
+  const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
+  const [session, setSession] = useState<string>();
+  const [deepLink, setDeepLink] = useState<string>('');
+  const [phantomSession, setPhantomSession] = useState<string | null>(null);
+  const [connectingToPhantom, setConnectingToPhantom] = useState(false);
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'previous'>('live');
+  const [userBets, setUserBets] = useState<any[]>([]);
+  const [loadingBets, setLoadingBets] = useState(false);
+  const [endingPosition, setEndingPosition] = useState<string | null>(null);
   const { width: windowWidth, height: screenHeight } = Dimensions.get('window');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
@@ -72,6 +404,7 @@ export const UserScreen = () => {
     subtext: '#444',
     border: '#000',
     green: '#22c55e',
+    orange: '#F97316',
     shadow: '#000',
     input: '#f6f8fa',
     modal: '#fff',
@@ -84,6 +417,7 @@ export const UserScreen = () => {
     subtext: '#c8b6e8', // Light purple subtext
     border: '#4a3f66', // Medium purple border
     green: '#22c55e',
+    orange: '#F97316',
     shadow: '#130f1c', // Very dark purple shadow
     input: '#352d4d', // Medium-dark purple input
     modal: '#2d2640', // Same as card color
@@ -91,31 +425,84 @@ export const UserScreen = () => {
   };
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
 
-  useEffect(() => {
-    const fetchBalance = async () => {
-      if (!account?.address) return;
-      setLoadingBalance(true);
-      try {
-        const connection = new Connection('https://api.mainnet-beta.solana.com');
-        const balance = await connection.getBalance(new PublicKey(account.address));
-        setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
-      } catch (e) {
-        setSolBalance(null);
-      } finally {
-        setLoadingBalance(false);
+  // Add a helper function to refresh balance
+  const fetchBalance = useCallback(async () => {
+    if (!account?.address) return;
+    
+    setLoadingBalance(true);
+    try {
+      // Fetch SOL balance
+      const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+      const balance = await connection.getBalance(new PublicKey(account.address));
+      setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
+      
+      // Fetch BONK balance using Jupiter Ultra API
+      const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+      const response = await fetch(`https://ultra-api.jup.ag/balances/${account.address}`);
+      
+      if (response.ok) {
+        const balances = await response.json();
+        console.log('Jupiter balances response:', balances);
+        
+        if (balances[BONK_MINT] && balances[BONK_MINT].uiAmount) {
+          const bonkAmount = balances[BONK_MINT].uiAmount;
+          console.log('BONK amount found:', bonkAmount);
+          setBonkBalance(bonkAmount.toFixed(2));
+        } else {
+          console.log('No BONK balance found');
+          setBonkBalance('0.00');
+        }
+      } else {
+        console.log('Failed to fetch balances from Jupiter API');
+        setBonkBalance('0.00');
       }
-    };
-    fetchBalance();
+    } catch (e) {
+      console.error("Error fetching balance:", e);
+      setSolBalance(null);
+      setBonkBalance(null);
+    } finally {
+      setLoadingBalance(false);
+    }
   }, [account?.address]);
 
   useEffect(() => {
-    // Fetch real-time SOL price in USD
+    console.log('Account address changed:', account?.address);
+    if (account?.address) {
+      console.log('Triggering balance fetch for address:', account.address);
+      fetchBalance();
+    }
+  }, [account?.address, fetchBalance]);
+
+  useEffect(() => {
+    // Fetch real-time SOL price in USD using Jupiter
     const fetchSolPrice = async () => {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-        const data = await res.json();
-        setSolPrice(data.solana.usd);
-      } catch {}
+        // SOL mint address
+        const SOL_MINT = 'So11111111111111111111111111111111111111112';
+        // USDC mint address  
+        const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+        // 1 SOL in lamports
+        const oneSOLInLamports = 1000000000;
+        
+        const response = await fetch(
+          `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=${oneSOLInLamports}&slippageBps=50`
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Convert USDC amount (6 decimals) to USD price
+          const usdcAmount = parseInt(data.outAmount) / 1000000; // USDC has 6 decimals
+          setSolPrice(usdcAmount);
+        }
+      } catch (error) {
+        console.error('Error fetching SOL price from Jupiter:', error);
+        // Fallback to CoinGecko if Jupiter fails
+        try {
+          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+          const data = await res.json();
+          setSolPrice(data.solana.usd);
+        } catch {}
+      }
     };
     fetchSolPrice();
     const interval = setInterval(fetchSolPrice, 60000); // update every 60s
@@ -128,7 +515,518 @@ export const UserScreen = () => {
       create();
     }
   }, [user, account?.address, create]);
-  
+
+  // Initialize deeplinks only once
+  useEffect(() => {
+    let linkingSubscription: any;
+
+    const initializeDeeplinks = async () => {
+      // Handle initial URL if app was opened via deeplink
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        handleDeepLink({ url: initialUrl });
+      }
+
+      // Listen for incoming links
+      linkingSubscription = Linking.addEventListener("url", handleDeepLink);
+    };
+
+    initializeDeeplinks();
+
+    return () => {
+      if (linkingSubscription) {
+        linkingSubscription.remove();
+      }
+    };
+  }, []); // Empty dependency array - only run once
+
+  // Improved deeplink handler
+  const handleDeepLink = useCallback(({ url }: { url: string }) => {
+    console.log("Received deep link:", url);
+
+    // Prevent processing the same URL multiple times
+    if (url === deepLink) {
+      return;
+    }
+    setDeepLink(url);
+
+    try {
+      const urlObj = new URL(url);
+      const params = urlObj.searchParams;
+
+      // Handle errors
+      if (params.get("errorCode")) {
+        const errorMessage = params.get("errorMessage") || "Unknown error occurred";
+        console.log("Phantom error:", errorMessage);
+        Alert.alert("Wallet Error", errorMessage);
+        setConnectingToPhantom(false);
+        return;
+      }
+
+      // Handle connect response
+      if (urlObj.pathname.includes("onConnect")) {
+        console.log("Processing Phantom connect response");
+        
+        const phantomEncryptionPubkey = params.get("phantom_encryption_public_key");
+        const nonce = params.get("nonce");
+        const data = params.get("data");
+        
+        if (phantomEncryptionPubkey && nonce && data) {
+          console.log("Phantom connection successful!");
+          setPhantomSession(`${phantomEncryptionPubkey}-${nonce}`);
+          setConnectingToPhantom(false);
+          
+          Alert.alert(
+            "Phantom Connected! 🎉",
+            "Successfully connected to Phantom wallet!",
+            [{ text: "OK" }]
+          );
+        } else {
+          console.log("Missing connection parameters");
+          setConnectingToPhantom(false);
+        }
+      }
+
+      // Handle disconnect response
+      if (urlObj.pathname.includes("onDisconnect")) {
+        console.log("Phantom disconnected");
+        setPhantomSession(null);
+        Alert.alert("Phantom Disconnected", "Your Phantom wallet has been disconnected.");
+      }
+
+      // Handle transaction response
+      if (urlObj.pathname.includes("onSignAndSendTransaction")) {
+        console.log("Processing Phantom transaction response");
+        const signature = params.get("signature");
+        
+        if (signature) {
+          console.log("Transaction signature:", signature);
+          Alert.alert(
+            "Transaction Successful! 🎉",
+            `Transaction completed with signature: ${signature.slice(0, 8)}...`,
+            [
+              {
+                text: "View on Explorer",
+                onPress: () => {
+                  Linking.openURL(`https://solscan.io/tx/${signature}`);
+                }
+              },
+              { text: "OK" }
+            ]
+          );
+          
+          // Refresh balance after successful transaction
+          setTimeout(() => {
+            if (account?.address) {
+              fetchBalance();
+            }
+          }, 2000);
+        }
+      }
+
+    } catch (error) {
+      console.error("Error processing deep link:", error);
+      setConnectingToPhantom(false);
+    }
+  }, [deepLink, account?.address]);
+
+  // Fixed Phantom connection function
+  const connectToPhantom = useCallback(async () => {
+    // if (connectingToPhantom) {
+    //   console.log("Already connecting to Phantom, skipping...");
+    //   return;
+    // }
+
+    setConnectingToPhantom(true);
+    
+    try {
+      const appUrl =  Linking.createURL("");
+      const onConnectRedirectLink = `${appUrl}onConnect`;
+      
+      console.log("App URL:", appUrl);
+      console.log("Connect redirect:", onConnectRedirectLink);
+      
+      const params = new URLSearchParams({
+        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+        cluster: "mainnet-beta",
+        app_url: "https://takes-app.vercel.app/",
+        redirect_link: onConnectRedirectLink,
+      });
+
+      const phantomUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
+      console.log("Opening Phantom URL:", phantomUrl);
+      
+    await Linking.openURL(phantomUrl);
+      // if (canOpen) {
+      //   await Linking.openURL(phantomUrl);
+      // } else {
+      //   Alert.alert(
+      //     "Phantom Not Found",
+      //     "Please install Phantom wallet from the App Store first.",
+      //     [
+      //       {
+      //         text: "Install Phantom",
+      //         onPress: () => {
+      //           Linking.openURL("https://phantom.app/download");
+      //         }
+      //       },
+      //       { text: "Cancel", onPress: () => setConnectingToPhantom(false) }
+      //     ]
+      //   );
+      // }
+    } catch (error) {
+      console.error("Error connecting to Phantom:", error);
+      Alert.alert("Connection Error", "Failed to connect to Phantom wallet.");
+      setConnectingToPhantom(false);
+    }
+  }, [connectingToPhantom, dappKeyPair.publicKey]);
+
+  // Fetch user's bets
+  const fetchUserBets = async () => {
+    if (!account?.address) return;
+    
+    setLoadingBets(true);
+    try {
+      const response = await fetch('https://apipoolc.vercel.app/api/read');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Filter bets where user is a participant
+          const allBets = data.bets || [];
+          const participatedBets = allBets.filter((bet: any) => 
+            bet.participants?.some((p: any) => p.wallet === account.address)
+          );
+          setUserBets(participatedBets);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user bets:', error);
+    } finally {
+      setLoadingBets(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserBets();
+  }, [account?.address]);
+
+  // Jupiter API functions for token swapping
+  const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
+    try {
+      const response = await fetch(
+        `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to get Jupiter quote');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Jupiter quote error:', error);
+      throw error;
+    }
+  };
+
+  const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
+    try {
+      const response = await fetch('https://quote-api.jup.ag/v6/swap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quoteResponse,
+          userPublicKey,
+          wrapAndUnwrapSol: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get Jupiter swap transaction');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Jupiter swap transaction error:', error);
+      throw error;
+    }
+  };
+
+  // Get token balance using Jupiter Ultra API
+  const getTokenBalance = async (walletAddress: string, tokenMint: string) => {
+    try {
+      const response = await fetch(`https://ultra-api.jup.ag/balances/${walletAddress}`);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch balances from Jupiter Ultra API');
+        return 0;
+      }
+      
+      const balances = await response.json();
+      
+      // Check if the token exists in the wallet
+      if (balances[tokenMint]) {
+        return balances[tokenMint].uiAmount;
+      }
+      
+      return 0;
+    } catch (error) {
+      console.error('Error getting token balance from Jupiter Ultra API:', error);
+      return 0;
+    }
+  };
+
+  // Get token decimals using Jupiter Pools API
+  const getTokenDecimals = async (tokenMint: string) => {
+    try {
+      const response = await fetch(`https://datapi.jup.ag/v1/pools?assetIds=${tokenMint}`);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch token info from Jupiter Pools API');
+        return 9; // Default to 9 decimals (like SOL)
+      }
+      
+      const data = await response.json();
+      
+      if (data.pools && data.pools.length > 0 && data.pools[0].baseAsset) {
+        return data.pools[0].baseAsset.decimals;
+      }
+      
+      return 9; // Default to 9 decimals if not found
+    } catch (error) {
+      console.error('Error getting token decimals:', error);
+      return 9; // Default to 9 decimals
+    }
+  };
+
+  // Check if token account exists and has balance using Jupiter Ultra API
+  const checkTokenAccountExists = async (walletAddress: string, tokenMint: string) => {
+    try {
+      const response = await fetch(`https://ultra-api.jup.ag/balances/${walletAddress}`);
+      
+      if (!response.ok) {
+        return { exists: false, balance: 0 };
+      }
+      
+      const balances = await response.json();
+      
+      if (balances[tokenMint]) {
+        return { exists: true, balance: balances[tokenMint].uiAmount };
+      }
+      
+      return { exists: false, balance: 0 };
+    } catch (error) {
+      console.error('Error checking token account:', error);
+      return { exists: false, balance: 0 };
+    }
+  };
+
+  // End Position function - sell ALL tokens back to SOL
+  const handleEndPosition = async (bet: any, participation: any) => {
+    if (!wallets || wallets.length === 0) {
+      Alert.alert('Error', 'No wallet found. Please connect your wallet first.');
+      return;
+    }
+
+    const wallet = wallets[0];
+    const userWallet = wallet.address;
+
+    if (!userWallet) {
+      Alert.alert('Error', 'Unable to get wallet address.');
+      return;
+    }
+
+    setEndingPosition(bet.id);
+
+    try {
+      // SOL mint address (wrapped SOL)
+      const SOL_MINT = 'So11111111111111111111111111111111111111112';
+      const tokenMint = bet.tokenAddresses[participation.optionIndex];
+      
+      console.log('Checking token account and balance...');
+      
+      // Get token balance from Jupiter Ultra API
+      const tokenBalance = await getTokenBalance(userWallet, tokenMint);
+      
+      console.log('Token balance from Jupiter Ultra API:', tokenBalance);
+      
+      if (tokenBalance <= 0) {
+        Alert.alert(
+          'No Tokens Found',
+          'You have already withdrawn all your tokens for this bet.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Get token decimals from Jupiter Pools API
+      const tokenDecimals = await getTokenDecimals(tokenMint);
+      console.log('Token decimals:', tokenDecimals);
+      
+      // Convert token balance to the smallest unit using correct decimals
+      const tokenAmount = Math.floor(tokenBalance * Math.pow(10, tokenDecimals));
+
+      console.log('Getting Jupiter quote for token to SOL...');
+      
+      // Get quote from Jupiter (Token → SOL)
+      const quote = await getJupiterQuote(tokenMint, SOL_MINT, tokenAmount);
+      
+      console.log('Jupiter quote:', quote);
+
+      // Get swap transaction
+      const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
+      
+      console.log('Got swap transaction');
+
+      // Deserialize the transaction
+      const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
+
+      console.log('Signing and sending transaction...');
+
+      // Sign and send transaction using Privy
+      const provider = await wallet.getProvider();
+      const { signature } = await provider.request({
+        method: 'signAndSendTransaction',
+        params: {
+          transaction: transaction,
+          connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+        },
+      });
+
+      console.log('Transaction successful:', signature);
+
+      Alert.alert(
+        'Position Closed! 🎉',
+        `Successfully sold ${tokenBalance.toFixed(4)} tokens for SOL!\n\nTransaction: ${signature.slice(0, 8)}...`,
+        [{ text: 'OK' }]
+      );
+
+      // Refresh user bets and trigger token balance recheck
+      await fetchUserBets();
+      
+      // Refresh user's SOL balance
+      const refreshBalance = async () => {
+        if (!account?.address) return;
+        try {
+          const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+          const balance = await connection.getBalance(new PublicKey(account.address));
+          setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
+        } catch (e) {
+          console.error('Error refreshing balance:', e);
+        }
+      };
+      
+      // Refresh balance immediately and after a short delay to ensure transaction is confirmed
+      await refreshBalance();
+      setTimeout(refreshBalance, 2000);
+      
+      // Trigger a recheck of token balances for all bet cards
+      // This will cause the BetCard components to re-check their token balances
+      setTimeout(() => {
+        // Force re-render of bet cards to update token status
+        setUserBets([...userBets]);
+      }, 1000);
+
+    } catch (error) {
+      console.error('End position error:', error);
+      Alert.alert(
+        'Error',
+        `Failed to end position: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setEndingPosition(null);
+    }
+  };
+
+  // Fixed transfer functions
+  const handlePhantomTransfer = useCallback(async (amount: string) => {
+    if (!account?.address) {
+      Alert.alert("Error", "No wallet address found");
+      return;
+    }
+
+    if (!phantomSession) {
+      Alert.alert(
+        "Phantom Not Connected",
+        "Please connect to Phantom wallet first.",
+        [
+          {
+            text: "Connect",
+            onPress: connectToPhantom
+          },
+          { text: "Cancel" }
+        ]
+      );
+      return;
+    }
+
+    try {
+      const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
+      const appUrl = await Linking.createURL("");
+      const redirectLink = `${appUrl}onSignAndSendTransaction`;
+      
+      // Create the transfer URL using Phantom's format
+      const transferParams = new URLSearchParams({
+        recipient: account.address,
+        amount: lamports.toString(),
+        spl_token: "", // Empty for SOL transfers
+        redirect_link: redirectLink,
+      });
+
+      const transferUrl = `https://phantom.app/ul/v1/transfer?${transferParams.toString()}`;
+      console.log("Opening Phantom transfer URL:", transferUrl);
+      
+      const canOpen = await Linking.canOpenURL(transferUrl);
+      if (canOpen) {
+        await Linking.openURL(transferUrl);
+      } else {
+        Alert.alert("Error", "Cannot open Phantom wallet");
+      }
+    } catch (error) {
+      console.error("Error creating Phantom transfer:", error);
+      Alert.alert("Error", "Failed to create transfer request");
+    }
+  }, [account?.address, phantomSession, connectToPhantom]);
+
+  const handleSolflareTransfer = useCallback(async (amount: string) => {
+    if (!account?.address) {
+      Alert.alert("Error", "No wallet address found");
+      return;
+    }
+
+    try {
+      const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
+      
+      // Solflare uses a different URL format
+      const transferUrl = `https://solflare.com/ul/v1/transfer?recipient=${account.address}&amount=${lamports}&token=SOL`;
+      console.log("Opening Solflare transfer URL:", transferUrl);
+      
+      const canOpen = await Linking.canOpenURL(transferUrl);
+      if (canOpen) {
+        await Linking.openURL(transferUrl);
+      } else {
+        Alert.alert(
+          "Solflare Not Found",
+          "Please install Solflare wallet first.",
+          [
+            {
+              text: "Install Solflare",
+              onPress: () => {
+                Linking.openURL("https://solflare.com/download");
+              }
+            },
+            { text: "Cancel" }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error("Error creating Solflare transfer:", error);
+      Alert.alert("Error", "Failed to create transfer request");
+    }
+  }, [account?.address]);
+
   // Open settings modal with animation
   const openSettingsModal = () => {
     // Reset animation values
@@ -188,16 +1086,17 @@ export const UserScreen = () => {
   // --- PROFILE HEADER (NO GREEN BG, NAME+USERNAME BESIDE PFP) ---
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Profile Header */}
-      <View style={{
-        backgroundColor: theme.card,
-        borderBottomWidth: 2,
-        borderColor: theme.border,
-        position: 'relative',
-        zIndex: 1,
-        paddingBottom: 0,
-        paddingHorizontal: 0,
-      }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={{
+          backgroundColor: theme.card,
+          borderBottomWidth: 2,
+          borderColor: theme.border,
+          position: 'relative',
+          zIndex: 1,
+          paddingBottom: 0,
+          paddingHorizontal: 0,
+        }}>
         {/* No green banner */}
         {/* Logout and Settings buttons stacked vertically at top right */}
         <View style={{
@@ -318,15 +1217,28 @@ export const UserScreen = () => {
         }}>
           {solBalance && solPrice ? `$${(parseFloat(solBalance) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : loadingBalance ? 'Loading...' : '-'}
         </Text>
+        
+        {/* SOL Balance */}
         <Text style={{ 
           fontSize: 14, 
           fontFamily: 'PressStart2P-Regular',
           color: theme.subtext, 
           marginTop: 12,
-          marginBottom: 8, 
+          marginBottom: 4, 
           textAlign: 'left' 
         }}>
           {solBalance !== null ? `${solBalance} SOL` : ''}
+        </Text>
+        
+        {/* BONK Balance */}
+        <Text style={{ 
+          fontSize: 14, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.orange || '#F97316', 
+          marginBottom: 8, 
+          textAlign: 'left' 
+        }}>
+          {bonkBalance !== null ? `${bonkBalance} BONK` : 'Loading BONK...'}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
           <Text style={{ 
@@ -353,12 +1265,24 @@ export const UserScreen = () => {
         {/* Wallet address QR code on profile */}
         {/* QR code removed as requested */}
       </View>
-      {/* Deposit button (outside balance card) */}
-      <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 18, marginBottom: 8 }}>
+      {/* Add Funds and Withdraw buttons */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18, marginBottom: 8, paddingHorizontal: 18 }}>
         <RetroButton
-          title="RECEIVE"
-          onPress={() => setShowReceiveModal(true)}
+          title="ADD"
+          onPress={() => setShowAddFundsModal(true)}
           backgroundColor="#4ed620" // Match the login button color
+          textColor="#000000"
+          fontSize={14}
+          letterSpacing={0}
+          fontWeight="normal"
+          minHeight={48}
+          minWidth={120}
+          textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+        />
+        <RetroButton
+          title="WITHDRAW"
+          onPress={() => setShowWithdrawModal(true)}
+          backgroundColor="#F97316" // Orange for withdraw
           textColor="#000000"
           fontSize={14}
           letterSpacing={0}
@@ -773,30 +1697,553 @@ export const UserScreen = () => {
         ))}
       </View>
       {/* Tab Content */}
-      {activeTab === 'live' ? (
-        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
+      <View style={{ marginTop: 18, marginBottom: 60 }}>
+        {loadingBets ? (
+          <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
+            <ActivityIndicator color={theme.green} />
+            <Text style={{ 
+              color: theme.subtext, 
+              fontSize: 12,
+              fontFamily: 'PressStart2P-Regular',
+              marginTop: 8 
+            }}>
+              LOADING YOUR BETS...
+            </Text>
+          </View>
+        ) : (
+          <>
+            {activeTab === 'live' ? (
+              // Live bets
+              userBets.filter(bet => bet.isActive && new Date(bet.endTime) > new Date()).length === 0 ? (
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
+                  <Text style={{ 
+                    color: theme.subtext, 
+                    fontSize: 12,
+                    fontFamily: 'PressStart2P-Regular',
+                  }}>
+                    NO LIVE BETS YET.
+                  </Text>
+                </View>
+              ) : (
+                userBets
+                  .filter(bet => bet.isActive && new Date(bet.endTime) > new Date())
+                  .map((bet, index) => (
+                    <BetCard 
+                      key={bet.id} 
+                      bet={bet} 
+                      userWallet={account?.address} 
+                      theme={theme}
+                      onEndPosition={handleEndPosition}
+                      endingPosition={endingPosition}
+                    />
+                  ))
+              )
+            ) : (
+              // Previous bets (ended or inactive)
+              userBets.filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date()).length === 0 ? (
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
+                  <Text style={{ 
+                    color: theme.subtext, 
+                    fontSize: 12,
+                    fontFamily: 'PressStart2P-Regular',
+                  }}>
+                    NO PREVIOUS BETS YET.
+                  </Text>
+                </View>
+              ) : (
+                userBets
+                  .filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date())
+                  .map((bet, index) => (
+                    <BetCard 
+                      key={bet.id} 
+                      bet={bet} 
+                      userWallet={account?.address} 
+                      theme={theme}
+                      onEndPosition={handleEndPosition}
+                      endingPosition={endingPosition}
+                    />
+                  ))
+              )
+            )}
+          </>
+        )}
+      </View>
+
+      {/* Add Funds Modal */}
+      <Modal
+        visible={showAddFundsModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddFundsModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={() => setShowAddFundsModal(false)}
+        />
+        <View style={{ 
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: theme.modal,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          padding: 28,
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 20,
+          elevation: 20,
+        }}>
+          {/* Handle */}
+          <View style={{
+            width: 40,
+            height: 4,
+            backgroundColor: theme.subtext,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginBottom: 24,
+          }} />
+          
+          <Text style={{ 
+            fontSize: 18, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.green, 
+            marginBottom: 24, 
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            ADD FUNDS / CONNECT WALLET
+          </Text>
+          
+          <Text style={{ 
+            color: theme.text, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16, 
+            textAlign: 'center' 
+          }}>
+            ENTER AMOUNT (SOL):
+          </Text>
+          
+          <TextInput
+            style={{ 
+              width: '100%', 
+              borderWidth: 3, 
+              borderColor: theme.green, 
+              borderRadius: 16, 
+              padding: 14, 
+              marginBottom: 24, 
+              fontSize: 16, 
+              backgroundColor: theme.input, 
+              fontWeight: 'bold', 
+              color: theme.text,
+              fontFamily: 'PressStart2P-Regular',
+            }}
+            placeholder="0.1"
+            value={addFundsAmount}
+            onChangeText={setAddFundsAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor={theme.placeholder}
+          />
+          
           <Text style={{ 
             color: theme.subtext, 
-            fontSize: 12,
+            fontSize: 10, 
             fontFamily: 'PressStart2P-Regular',
+            marginBottom: 20, 
+            textAlign: 'center' 
           }}>
-            NO LIVE BETS YET.
+            CHOOSE WALLET:
           </Text>
+          
+          {/* Connect Phantom Button with status */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: phantomSession ? '#4CAF50' : '#9945FF',
+              borderRadius: 12,
+              padding: 16,
+              alignItems: 'center',
+              borderWidth: 2,
+              borderColor: theme.border,
+              marginBottom: 12,
+            }}
+            onPress={connectToPhantom}
+            // disabled={connectingToPhantom}
+          >
+            {connectingToPhantom ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{
+                color: '#fff',
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                {phantomSession ? '✓ PHANTOM CONNECTED' : 'CONNECT PHANTOM'}
+              </Text>
+            )}
+          </TouchableOpacity>
+          
+          <View style={{ gap: 12 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#9945FF',
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: theme.border,
+              }}
+              onPress={() => {
+                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
+                  Alert.alert('Error', 'Please enter a valid amount');
+                  return;
+                }
+                handlePhantomTransfer(addFundsAmount);
+                setShowAddFundsModal(false);
+                setAddFundsAmount('');
+              }}
+            >
+              <Text style={{
+                color: '#fff',
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                PHANTOM WALLET
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#FC9965',
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: theme.border,
+              }}
+              onPress={() => {
+                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
+                  Alert.alert('Error', 'Please enter a valid amount');
+                  return;
+                }
+                handleSolflareTransfer(addFundsAmount);
+                setShowAddFundsModal(false);
+                setAddFundsAmount('');
+              }}
+            >
+              <Text style={{
+                color: '#fff',
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                SOLFLARE WALLET
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      ) : (
-        <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, marginTop: 18, padding: 18, borderWidth: 2, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2 }}>
+      </Modal>
+
+      {/* Withdraw Modal */}
+      <Modal
+        visible={showWithdrawModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowWithdrawModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={() => setShowWithdrawModal(false)}
+        />
+        <View style={{ 
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: theme.modal,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          padding: 28,
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 20,
+          elevation: 20,
+        }}>
+          {/* Handle */}
+          <View style={{
+            width: 40,
+            height: 4,
+            backgroundColor: theme.subtext,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginBottom: 24,
+          }} />
+          
+          <Text style={{ 
+            fontSize: 18, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.orange, 
+            marginBottom: 24, 
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            WITHDRAW FUNDS
+          </Text>
+          
+          {/* Token Selection */}
+          <Text style={{ 
+            color: theme.text, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16, 
+            textAlign: 'center' 
+          }}>
+            SELECT TOKEN:
+          </Text>
+          
+          <View style={{ flexDirection: 'row', marginBottom: 24 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: withdrawToken === 'SOL' ? theme.green : theme.input,
+                borderRadius: 12,
+                padding: 12,
+                marginRight: 8,
+                borderWidth: 2,
+                borderColor: withdrawToken === 'SOL' ? theme.green : theme.border,
+                alignItems: 'center',
+              }}
+              onPress={() => setWithdrawToken('SOL')}
+            >
+              <Text style={{
+                color: withdrawToken === 'SOL' ? '#fff' : theme.text,
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                SOL
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: withdrawToken === 'BONK' ? theme.orange : theme.input,
+                borderRadius: 12,
+                padding: 12,
+                marginLeft: 8,
+                borderWidth: 2,
+                borderColor: withdrawToken === 'BONK' ? theme.orange : theme.border,
+                alignItems: 'center',
+              }}
+              onPress={() => setWithdrawToken('BONK')}
+            >
+              <Text style={{
+                color: withdrawToken === 'BONK' ? '#fff' : theme.text,
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                BONK
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          {/* Recipient Address */}
+          <Text style={{ 
+            color: theme.text, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16, 
+            textAlign: 'center' 
+          }}>
+            RECIPIENT ADDRESS:
+          </Text>
+          
+          <TextInput
+            style={{ 
+              width: '100%', 
+              borderWidth: 3, 
+              borderColor: theme.orange, 
+              borderRadius: 16, 
+              padding: 14, 
+              marginBottom: 24, 
+              fontSize: 16, 
+              backgroundColor: theme.input, 
+              fontWeight: 'bold', 
+              color: theme.text,
+              fontFamily: 'PressStart2P-Regular',
+            }}
+            placeholder="Enter Solana wallet address"
+            value={withdrawAddress}
+            onChangeText={setWithdrawAddress}
+            autoCapitalize="none"
+            placeholderTextColor={theme.placeholder}
+          />
+          
+          {/* Amount */}
+          <Text style={{ 
+            color: theme.text, 
+            fontSize: 12, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16, 
+            textAlign: 'center' 
+          }}>
+            AMOUNT ({withdrawToken}):
+          </Text>
+          
+          <TextInput
+            style={{ 
+              width: '100%', 
+              borderWidth: 3, 
+              borderColor: theme.orange, 
+              borderRadius: 16, 
+              padding: 14, 
+              marginBottom: 24, 
+              fontSize: 16, 
+              backgroundColor: theme.input, 
+              fontWeight: 'bold', 
+              color: theme.text,
+              fontFamily: 'PressStart2P-Regular',
+            }}
+            placeholder={withdrawToken === 'SOL' ? "0.1" : "1000"}
+            value={withdrawAmount}
+            onChangeText={setWithdrawAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor={theme.placeholder}
+          />
+          
+          {/* Available Balance */}
           <Text style={{ 
             color: theme.subtext, 
-            fontSize: 12,
+            fontSize: 10, 
             fontFamily: 'PressStart2P-Regular',
+            marginBottom: 20, 
+            textAlign: 'center' 
           }}>
-            NO PREVIOUS BETS YET.
+            Available: {withdrawToken === 'SOL' ? 
+              (solBalance ? `${solBalance} SOL` : '0 SOL') : 
+              (bonkBalance ? `${bonkBalance} BONK` : '0 BONK')}
           </Text>
+          
+          {/* Debug Info */}
+          <Text style={{ 
+            color: theme.subtext, 
+            fontSize: 8, 
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 10, 
+            textAlign: 'center' 
+          }}>
+            Debug: SOL={solBalance}, BONK={bonkBalance}
+          </Text>
+          
+          {/* Action Buttons */}
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+          <RetroButton
+            title="REFRESH"
+            backgroundColor={theme.green}
+            textColor="#000000"
+            fontSize={12}
+            letterSpacing={0}
+            fontWeight="normal"
+            minHeight={48}
+            minWidth={80}
+            textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+            onPress={() => {
+              console.log('Manual refresh triggered');
+              fetchBalance();
+            }}
+          />
+          <RetroButton
+            title="WITHDRAW"
+            backgroundColor={theme.orange}
+            textColor="#000000"
+            fontSize={12}
+            letterSpacing={0}
+            fontWeight="normal"
+            minHeight={48}
+            minWidth={120}
+            textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+              onPress={() => {
+                if (!withdrawAddress || !withdrawAmount) {
+                  Alert.alert('Error', 'Please enter address and amount');
+                  return;
+                }
+                
+                // Validate Solana address
+                try {
+                  new PublicKey(withdrawAddress);
+                } catch {
+                  Alert.alert('Error', 'Invalid Solana address');
+                  return;
+                }
+                
+                // Validate amount
+                const amount = parseFloat(withdrawAmount);
+                if (isNaN(amount) || amount <= 0) {
+                  Alert.alert('Error', 'Invalid amount');
+                  return;
+                }
+                
+                // Check if user has enough balance
+                const currentBalance = withdrawToken === 'SOL' ? 
+                  parseFloat(solBalance || '0') : 
+                  parseFloat(bonkBalance || '0');
+                
+                if (amount > currentBalance) {
+                  Alert.alert('Error', `Insufficient ${withdrawToken} balance`);
+                  return;
+                }
+                
+                // For now, just show success (demo mode)
+                Alert.alert(
+                  'Withdrawal Requested',
+                  `Withdrawal of ${withdrawAmount} ${withdrawToken} to ${withdrawAddress.slice(0, 8)}... has been submitted.`,
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        setShowWithdrawModal(false);
+                        setWithdrawAddress('');
+                        setWithdrawAmount('');
+                      }
+                    }
+                  ]
+                );
+              }}
+            />
+            
+            <RetroButton
+              title="CANCEL"
+              backgroundColor="#FFFFFF"
+              textColor="#000000"
+              fontSize={12}
+              letterSpacing={0}
+              fontWeight="normal"
+              minHeight={48}
+              minWidth={120}
+              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+              onPress={() => {
+                setShowWithdrawModal(false);
+                setWithdrawAddress('');
+                setWithdrawAmount('');
+              }}
+            />
+          </View>
         </View>
-      )}
+      </Modal>
 
       {/* Remove tabs and live/previous bets sections */}
       {/* Bottom nav is already present globally */}
+      </ScrollView>
     </SafeAreaView>
   );
 };

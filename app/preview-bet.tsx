@@ -116,7 +116,7 @@ const MockStats = ({ theme }: { theme: any }) => {
 // Social Proof Component REMOVED
 
 export default function PreviewBetScreen() {
-  const { description, answers, duration, amount } = useLocalSearchParams();
+  const { description, answers, duration, amount, generatedImage, betType } = useLocalSearchParams();
   const { theme: themeName } = useContext(ThemeContext);
   const { wallets } = useEmbeddedSolanaWallet();
   const router = useRouter();
@@ -151,6 +151,7 @@ export default function PreviewBetScreen() {
     warning: '#EF4444',
     orange: '#F97316',
     pink: '#EC4899',
+    green: '#29d620',
   };
 
   let answersArr: Array<{type: string, content: string}> = [];
@@ -160,6 +161,33 @@ export default function PreviewBetScreen() {
   } catch {
     answersArr = [];
   }
+
+  // Get bet type from params
+  const currentBetType = Array.isArray(betType) ? betType[0] : betType || 'standard';
+
+  // Get card background color based on bet type
+  const getCardBackgroundColor = () => {
+    switch (currentBetType) {
+      case 'bonk':
+        return 'rgba(249, 115, 22, 0.15)'; // Orange background for bonk bets
+      case 'timeless':
+        return 'rgba(139, 92, 246, 0.15)'; // Purple background for timeless bets
+      default:
+        return '#242235'; // Default background
+    }
+  };
+
+  // Get border color based on bet type
+  const getBorderColor = () => {
+    switch (currentBetType) {
+      case 'bonk':
+        return 'rgba(249, 115, 22, 0.3)'; // Orange border for bonk bets
+      case 'timeless':
+        return 'rgba(139, 92, 246, 0.3)'; // Purple border for timeless bets
+      default:
+        return 'rgba(255,255,255,0.1)'; // Default border
+    }
+  };
 
   const createTokenName = (optionIndex: number) => {
     if (answersArr.length >= 2) {
@@ -327,10 +355,12 @@ export default function PreviewBetScreen() {
         options: answersArr.map(answer => answer.content),
         tokenAddresses: tokens.map(token => token.mint),
         solAmount: parseFloat(Array.isArray(amount) ? amount[0] : amount || '1'),
-        duration: parseInt(Array.isArray(duration) ? duration[0] : duration || '24'),
+        duration: currentBetType === 'timeless' ? null : parseInt(Array.isArray(duration) ? duration[0] : duration || '24'),
         userWallet: userWallet,
         creatorName: "Anonymous", // You can make this configurable later
-        category: "General" // You can make this configurable later
+        category: "General", // You can make this configurable later
+        generatedImage: Array.isArray(generatedImage) ? generatedImage[0] : generatedImage,
+        betType: currentBetType
       };
 
       console.log('Adding bet to database:', betData);
@@ -392,7 +422,7 @@ export default function PreviewBetScreen() {
       }}>
         {/* Preview Card - Using same layout as live-bets */}
         <View style={{
-          backgroundColor: '#242235',
+          backgroundColor: getCardBackgroundColor(),
           borderRadius: 16,
           padding: 20,
           marginBottom: 24,
@@ -401,7 +431,49 @@ export default function PreviewBetScreen() {
           shadowOpacity: 0.3,
           shadowRadius: 8,
           elevation: 10,
+          borderWidth: 2,
+          borderColor: getBorderColor(),
         }}>
+          {/* Bet Type Badge */}
+          <View style={{ 
+            position: 'absolute', 
+            top: 16, 
+            right: 16, 
+            zIndex: 10,
+            backgroundColor: currentBetType === 'bonk' ? theme.orange : 
+                           currentBetType === 'timeless' ? theme.primary : theme.green,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: '#fff',
+          }}>
+            <Text style={{ 
+              fontSize: 10, 
+              fontFamily: 'PressStart2P-Regular',
+              color: '#fff',
+              textTransform: 'uppercase',
+            }}>
+              {currentBetType === 'bonk' ? '🪙 BONK' : 
+               currentBetType === 'timeless' ? '♾️ TIMELESS' : '🎯 STANDARD'}
+            </Text>
+          </View>
+
+          {/* Generated Image Display */}
+          {generatedImage && (
+            <View style={{ marginBottom: 20 }}>
+              <Image 
+                source={{ uri: Array.isArray(generatedImage) ? generatedImage[0] : generatedImage }} 
+                style={{ 
+                  width: '100%', 
+                  height: 200, 
+                  borderRadius: 12,
+                }} 
+                resizeMode="cover"
+              />
+            </View>
+          )}
+
           {/* Question Display with bottom border */}
           <View style={{ 
             paddingBottom: 15, 
@@ -435,17 +507,6 @@ export default function PreviewBetScreen() {
                   alignItems: 'center',
                 }}
               >
-                {answersArr[0].type === 'image' ? (
-                  <Image 
-                    source={{ uri: answersArr[0].content }} 
-                    style={{ 
-                      width: 40, 
-                      height: 40, 
-                      borderRadius: 8,
-                      marginBottom: 8,
-                    }} 
-                  />
-                ) : null}
                 <Text style={{
                   fontSize: 16,
                   color: theme.text,
@@ -470,17 +531,6 @@ export default function PreviewBetScreen() {
                   alignItems: 'center',
                 }}
               >
-                {answersArr[1].type === 'image' ? (
-                  <Image 
-                    source={{ uri: answersArr[1].content }} 
-                    style={{ 
-                      width: 40, 
-                      height: 40, 
-                      borderRadius: 8,
-                      marginBottom: 8,
-                    }} 
-                  />
-                ) : null}
                 <Text style={{
                   fontSize: 16,
                   color: theme.text,
@@ -502,27 +552,14 @@ export default function PreviewBetScreen() {
                   borderWidth: 1,
                   borderColor: `${theme.text}15`,
                 }}>
-                  {answer.type === 'image' ? (
-                    <View style={{ alignItems: 'center' }}>
-                      <Image 
-                        source={{ uri: answer.content }} 
-                        style={{ 
-                          width: 80, 
-                          height: 80, 
-                          borderRadius: 12,
-                        }} 
-                      />
-                    </View>
-                  ) : (
-                    <Text style={{
-                      fontSize: 18,
-                      color: theme.text,
-                      textAlign: 'center',
-                      fontWeight: '500',
-                    }}>
-                      {answer.content || '[No answer]'}
-                    </Text>
-                  )}
+                  <Text style={{
+                    fontSize: 18,
+                    color: theme.text,
+                    textAlign: 'center',
+                    fontWeight: '500',
+                  }}>
+                    {answer.content || '[No answer]'}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -547,7 +584,10 @@ export default function PreviewBetScreen() {
                 Pool size:
               </Text>
               <Text style={{ fontSize: 14, color: theme.text, fontWeight: 'bold' }}>
-                {(parseFloat(Array.isArray(amount) ? amount[0] : amount || '1')).toFixed(1)} SOL
+                {currentBetType === 'bonk' ? 
+                  `${(parseFloat(Array.isArray(amount) ? amount[0] : amount || '1') * 1000).toFixed(0)} BONK` :
+                  `${(parseFloat(Array.isArray(amount) ? amount[0] : amount || '1')).toFixed(1)} SOL`
+                }
               </Text>
             </View>
             
@@ -567,19 +607,38 @@ export default function PreviewBetScreen() {
           </View>
           
           {/* Time tag positioned bottom left as per sketch */}
-          <View style={{
-            position: 'absolute',
-            bottom: 20,
-            left: 20,
-            flexDirection: 'row',
-            alignItems: 'center',
-            zIndex: 10
-          }}>
-            <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
-            <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4 }}>
-              {parseInt(Array.isArray(duration) ? duration[0] : duration || '24')}h
-            </Text>
-          </View>
+          {currentBetType !== 'timeless' && (
+            <View style={{
+              position: 'absolute',
+              bottom: 20,
+              left: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              zIndex: 10
+            }}>
+              <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4 }}>
+                {parseInt(Array.isArray(duration) ? duration[0] : duration || '24')}h
+              </Text>
+            </View>
+          )}
+
+          {/* Timeless indicator for timeless bets */}
+          {currentBetType === 'timeless' && (
+            <View style={{
+              position: 'absolute',
+              bottom: 20,
+              left: 20,
+              flexDirection: 'row',
+              alignItems: 'center',
+              zIndex: 10
+            }}>
+              <Ionicons name="infinite-outline" size={24} color={theme.primary} />
+              <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.primary, marginLeft: 4 }}>
+                TIMELESS
+              </Text>
+            </View>
+          )}
 
           {/* SocialProof REMOVED */}
         </View>

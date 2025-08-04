@@ -98,46 +98,47 @@ export default function LiveBetsScreen() {
     return colors[category as keyof typeof colors] || '#3B82F6';
   };
 
+  
   // For bet placement functionality
-  const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
-    try {
-      const response = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount * 10**9}&slippageBps=50`);
+  // const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
+  //   try {
+  //     const response = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount * 10**9}&slippageBps=50`);
       
-      if (!response.ok) {
-        throw new Error('Failed to get Jupiter quote');
-      }
+  //     if (!response.ok) {
+  //       throw new Error('Failed to get Jupiter quote');
+  //     }
       
-      return await response.json();
-    } catch (error) {
-      console.error('Jupiter quote error:', error);
-      throw error;
-    }
-  };
+  //     return await response.json();
+  //   } catch (error) {
+  //     console.error('Jupiter quote error:', error);
+  //     throw error;
+  //   }
+  // };
 
-  const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
-    try {
-      const response = await fetch('https://quote-api.jup.ag/v6/swap', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          quoteResponse,
-          userPublicKey,
-          wrapAndUnwrapSol: true,
-        }),
-      });
+  // const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
+  //   try {
+  //     const response = await fetch('https://quote-api.jup.ag/v6/swap', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         quoteResponse,
+  //         userPublicKey,
+  //         wrapAndUnwrapSol: true,
+  //       }),
+  //     });
 
-      if (!response.ok) {
-        throw new Error('Failed to get Jupiter swap transaction');
-      }
+  //     if (!response.ok) {
+  //       throw new Error('Failed to get Jupiter swap transaction');
+  //     }
 
-      return await response.json();
-    } catch (error) {
-      console.error('Jupiter swap transaction error:', error);
-      throw error;
-    }
-  };
+  //     return await response.json();
+  //   } catch (error) {
+  //     console.error('Jupiter swap transaction error:', error);
+  //     throw error;
+  //   }
+  // };
 
   // Card with typewriter effect and betting functionality
   const FullScreenBetCard = ({ bet, theme, router, index }: { bet: Bet; theme: any; router: any; index?: number }) => {
@@ -146,247 +147,347 @@ export default function LiveBetsScreen() {
     const [betAmount, setBetAmount] = useState('0.1');
     const [isPlacingBet, setIsPlacingBet] = useState(false);
     const { wallets } = useEmbeddedSolanaWallet();
-    const isExpired = new Date(bet.endTime) <= new Date();
+    const isExpired = bet.betType !== 'timeless' && new Date(bet.endTime || '') <= new Date();
+    const [generatedImage, setGeneratedImage] = useState<string>('');
     
-    // For typewriter effect
-    const [displayedText, setDisplayedText] = useState('');
-    const [isTyping, setIsTyping] = useState(true);
-    const fullText = bet.question;
-    const typingIntervalRef = useRef<number | null>(null);
-    const cursorAnim = useRef(new Animated.Value(0)).current;
-    
-    // Function to place a bet
-    const placeBet = async () => {
-      if (selectedOption === null || !wallets || wallets.length === 0) {
-        Alert.alert('Error', 'Please select an option and ensure your wallet is connected');
+    // Generate image using pollinations.ai API
+    const generateImage = async () => {
+      if (!bet.question || !bet.options || bet.options.length < 2) {
         return;
       }
-
-      const wallet = wallets[0];
-      const userWallet = wallet.address;
-
-      if (!userWallet) {
-        Alert.alert('Error', 'Unable to get wallet address');
-        return;
-      }
-
-      setIsPlacingBet(true);
 
       try {
-        // SOL mint address (wrapped SOL)
-        const SOL_MINT = 'So11111111111111111111111111111111111111112';
-        const targetTokenMint = bet.tokenAddresses[selectedOption];
-        const amount = parseFloat(betAmount);
-
-        console.log('Getting Jupiter quote...');
-        
-        // Get quote from Jupiter
-        const quote = await getJupiterQuote(SOL_MINT, targetTokenMint, amount);
-        
-        console.log('Jupiter quote:', quote);
-
-        // Get swap transaction
-        const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
-        
-        console.log('Got swap transaction');
-
-        // Deserialize the transaction
-        const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
-        const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-
-        console.log('Signing and sending transaction...');
-
-        // Sign and send transaction using Privy
-        const provider = await wallet.getProvider();
-        const { signature } = await provider.request({
-          method: 'signAndSendTransaction',
-          params: {
-            transaction: transaction,
-            connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
-          },
-        });
-
-        console.log('Transaction successful:', signature);
-
-        // Update bet in database
-        const updateResponse = await fetch('https://apipoolc.vercel.app/api/update', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            betId: bet.id,
-            action: 'add_participant',
-            data: {
-              participantWallet: userWallet,
-              optionIndex: selectedOption,
-              amount: amount,
-              transactionSignature: signature,
-            },
-          }),
-        });
-
-        if (!updateResponse.ok) {
-          console.warn('Failed to update bet in database, but transaction was successful');
-        } else {
-          const updateData = await updateResponse.json();
-          console.log('Bet updated in database:', updateData);
-          
-          // Update local bet data and refresh
-          if (updateData.success) {
-            fetchBets(); // Refresh all bets
-          }
-        }
-
-        Alert.alert(
-          'Success! 🎉',
-          `Your bet has been placed successfully!\n\nAmount: ${amount} SOL\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setShowBetModal(false);
-                setSelectedOption(null);
-              }
-            }
-          ]
-        );
-
+        const prompt = `${bet.question} ${bet.options[0]} vs ${bet.options[1]}`;
+        const encodedPrompt = encodeURIComponent(prompt);
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
+        setGeneratedImage(imageUrl);
       } catch (error) {
-        console.error('Bet placement error:', error);
-        Alert.alert(
-          'Error',
-          `Failed to place bet: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-      } finally {
-        setIsPlacingBet(false);
+        console.error('Error generating image:', error);
       }
     };
 
-    // Animate blinking cursor
-    const animateCursor = () => {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(cursorAnim, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(cursorAnim, {
-        toValue: 1,
-        duration: 500,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
+    // Generate image when bet data changes
+    useEffect(() => {
+      generateImage();
+    }, [bet.question, bet.options]);
+
+    // Get card background color based on bet type
+    const getCardBackgroundColor = () => {
+      switch (bet.betType) {
+        case 'bonk':
+          return 'rgba(249, 115, 22, 0.15)'; // Orange background for bonk bets
+        case 'timeless':
+          return 'rgba(139, 92, 246, 0.15)'; // Purple background for timeless bets
+        default:
+          return theme.card; // Default background
+      }
     };
 
-    // Typewriter effect
-    const startTypewriter = () => {
-      // Reset state
-      setDisplayedText('');
-      setIsTyping(true);
-      
-      // Start cursor animation
-      animateCursor();
-      
-      // Clear any existing interval
-      if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current);
+    // Get border color based on bet type
+    const getBorderColor = () => {
+      switch (bet.betType) {
+        case 'bonk':
+          return 'rgba(249, 115, 22, 0.3)'; // Orange border for bonk bets
+        case 'timeless':
+          return 'rgba(139, 92, 246, 0.3)'; // Purple border for timeless bets
+        default:
+          return theme.border; // Default border
       }
+    };
+
+    // Function to place a bet
+  // Fixed placeBet function with proper error handling and amount calculations
+const placeBet = async () => {
+  if (selectedOption === null || !wallets || wallets.length === 0) {
+    Alert.alert('Error', 'Please select an option and ensure your wallet is connected');
+    return;
+  }
+
+  const wallet = wallets[0];
+  const userWallet = wallet.address;
+
+  if (!userWallet) {
+    Alert.alert('Error', 'Unable to get wallet address.');
+    return;
+  }
+
+  setIsPlacingBet(true);
+
+  try {
+    const amount = parseFloat(betAmount);
+    
+    // Validate amount
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    // Handle different bet types
+    if (bet.betType === 'bonk') {
+      // For BONK bets, we need to handle BONK token swaps
+      const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'; // BONK token mint
+      const targetTokenMint = bet.tokenAddresses[selectedOption];
       
-      let i = 0;
-      let speed = 50; // Initial typing speed
+      // BONK has 5 decimals, so multiply by 10^5
+      const bonkAmountInSmallestUnit = Math.floor(amount * 100000);
+
+      console.log('Getting Jupiter quote for BONK to token...');
+      console.log('BONK amount in smallest unit:', bonkAmountInSmallestUnit);
       
-      // Start typing
-      typingIntervalRef.current = window.setInterval(() => {
-        if (i < fullText.length) {
-          setDisplayedText((prev) => prev + fullText.charAt(i));
-          i++;
-          
-          // Randomly vary typing speed for more natural effect
-          if (Math.random() > 0.7) {
-            speed = Math.floor(Math.random() * 80) + 20; // Between 20-100ms
-            if (typingIntervalRef.current) {
-              clearInterval(typingIntervalRef.current);
-              typingIntervalRef.current = window.setInterval(() => {
-                if (i < fullText.length) {
-                  setDisplayedText((prev) => prev + fullText.charAt(i));
-                  i++;
-                  
-                  // Trigger very light haptic feedback for typing effect on some characters
-                  if (Platform.OS !== 'web' && Math.random() > 0.8) {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }
-                } else {
-                  if (typingIntervalRef.current) {
-                    clearInterval(typingIntervalRef.current);
-                    typingIntervalRef.current = null;
-                  }
-                  
-                  // Keep cursor blinking for a moment after typing completes
-                  setTimeout(() => {
-                    setIsTyping(false);
-                  }, 1000);
-                }
-              }, speed);
+      // Get quote from Jupiter (BONK → Token) with higher slippage tolerance
+      const quote = await getJupiterQuote(BONK_MINT, targetTokenMint, bonkAmountInSmallestUnit);
+      
+      console.log('Jupiter quote for BONK:', quote);
+
+      // Check if the quote is reasonable
+      if (!quote.outAmount || quote.outAmount === '0') {
+        throw new Error('No liquidity available for this swap amount');
+      }
+
+      // Get swap transaction with user's public key
+      const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
+      
+      console.log('Got BONK swap transaction');
+
+      // Deserialize the transaction
+      const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
+      const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
+
+      console.log('Signing and sending BONK transaction...');
+
+      // Sign and send transaction using Privy
+      const provider = await wallet.getProvider();
+      const { signature } = await provider.request({
+        method: 'signAndSendTransaction',
+        params: {
+          transaction: transaction,
+          connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+        },
+      });
+
+      console.log('BONK transaction successful:', signature);
+
+      // Update bet in database
+      const updateResponse = await fetch('https://apipoolc.vercel.app/api/update', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          betId: bet.id,
+          action: 'add_participant',
+          data: {
+            participantWallet: userWallet,
+            optionIndex: selectedOption,
+            amount: amount,
+            transactionSignature: signature,
+          },
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        console.warn('Failed to update bet in database, but transaction was successful');
+      } else {
+        const updateData = await updateResponse.json();
+        console.log('Bet updated in database:', updateData);
+        
+        // Update local bet data and refresh
+        if (updateData.success) {
+          fetchBets(); // Refresh all bets
+        }
+      }
+
+      Alert.alert(
+        'Success! 🎉',
+        `Your BONK bet has been placed successfully!\n\nAmount: ${amount} BONK\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowBetModal(false);
+              setSelectedOption(null);
             }
           }
-          
-          // Trigger very light haptic feedback for typing effect on some characters
-          if (Platform.OS !== 'web' && Math.random() > 0.8) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }
-        } else {
-          if (typingIntervalRef.current) {
-            clearInterval(typingIntervalRef.current);
-            typingIntervalRef.current = null;
-          }
-          
-          // Keep cursor blinking for a moment after typing completes
-          setTimeout(() => {
-            setIsTyping(false);
-          }, 1000);
-        }
-      }, speed); // Adjust typing speed here
-    };
+        ]
+      );
+      return;
+    }
 
-    useEffect(() => {
-      // Start typewriter effect when the card becomes visible
-      const timeout = setTimeout(() => {
-        startTypewriter();
-      }, 300);
-      
-      return () => {
-        clearTimeout(timeout);
-        if (typingIntervalRef.current) {
-          clearInterval(typingIntervalRef.current);
-          typingIntervalRef.current = null;
-        }
-      };
-    }, []);
+    // For SOL bets (existing logic with improvements)
+    const SOL_MINT = 'So11111111111111111111111111111111111111112';
+    const targetTokenMint = bet.tokenAddresses[selectedOption];
     
-    // Restart typewriter effect when this card becomes visible again
-    useEffect(() => {
-      if (visibleItemIndices.includes(index as number)) {
-        const timeout = setTimeout(() => {
-          startTypewriter();
-        }, 300);
-        return () => clearTimeout(timeout);
-      } else {
-        // Reset when not visible
-        setDisplayedText('');
-        setIsTyping(false);
-        if (typingIntervalRef.current) {
-          clearInterval(typingIntervalRef.current);
-          typingIntervalRef.current = null;
-        }
+    // SOL has 9 decimals, so multiply by 10^9
+    const solAmountInLamports = Math.floor(amount * 1000000000);
+
+    console.log('Getting Jupiter quote...');
+    console.log('SOL amount in lamports:', solAmountInLamports);
+    
+    // Get quote from Jupiter with higher slippage tolerance
+    const quote = await getJupiterQuote(SOL_MINT, targetTokenMint, solAmountInLamports);
+    
+    console.log('Jupiter quote:', quote);
+
+    // Check if the quote is reasonable
+    if (!quote.outAmount || quote.outAmount === '0') {
+      throw new Error('No liquidity available for this swap amount');
+    }
+
+    // Get swap transaction
+    const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
+    
+    console.log('Got swap transaction');
+
+    // Deserialize the transaction
+    const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
+    const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
+
+    console.log('Signing and sending transaction...');
+
+    // Sign and send transaction using Privy
+    const provider = await wallet.getProvider();
+    const { signature } = await provider.request({
+      method: 'signAndSendTransaction',
+      params: {
+        transaction: transaction,
+        connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+      },
+    });
+
+    console.log('Transaction successful:', signature);
+
+    // Update bet in database
+    const updateResponse = await fetch('https://apipoolc.vercel.app/api/update', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        betId: bet.id,
+        action: 'add_participant',
+        data: {
+          participantWallet: userWallet,
+          optionIndex: selectedOption,
+          amount: amount,
+          transactionSignature: signature,
+        },
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      console.warn('Failed to update bet in database, but transaction was successful');
+    } else {
+      const updateData = await updateResponse.json();
+      console.log('Bet updated in database:', updateData);
+      
+      // Update local bet data and refresh
+      if (updateData.success) {
+        fetchBets(); // Refresh all bets
       }
-    }, [visibleItemIndices]);
+    }
 
-    // --- Place player count and pool size in a vertical stack at the right, like Instagram Reels like/comment/share ---
-    // --- Move time to left bottom, remove hot icon ---
+    Alert.alert(
+      'Success! 🎉',
+      `Your bet has been placed successfully!\n\nAmount: ${amount} SOL\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowBetModal(false);
+            setSelectedOption(null);
+          }
+        }
+      ]
+    );
 
+  } catch (error) {
+    console.error('Bet placement error:', error);
+    
+    // More specific error handling
+    let errorMessage = 'Unknown error occurred';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Simulation failed')) {
+        errorMessage = 'Transaction simulation failed. This might be due to insufficient funds, high slippage, or low liquidity.';
+      } else if (error.message.includes('No liquidity')) {
+        errorMessage = 'Insufficient liquidity for this swap amount. Try a smaller amount.';
+      } else if (error.message.includes('Slippage')) {
+        errorMessage = 'Slippage tolerance exceeded. Market conditions may have changed.';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    Alert.alert(
+      'Transaction Failed',
+      `Failed to place bet: ${errorMessage}\n\nPlease try again with a smaller amount or check your wallet balance.`
+    );
+  } finally {
+    setIsPlacingBet(false);
+  }
+};
+
+// Updated Jupiter quote function with better error handling and higher slippage
+const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
+  try {
+    // Use higher slippage tolerance (300 bps = 3%) for better success rate
+    const response = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=300`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get Jupiter quote: ${response.status} - ${errorText}`);
+    }
+    
+    const quote = await response.json();
+    
+    // Validate the quote
+    if (!quote.outAmount || quote.outAmount === '0') {
+      throw new Error('No liquidity available for this token pair');
+    }
+    
+    return quote;
+  } catch (error) {
+    console.error('Jupiter quote error:', error);
+    throw error;
+  }
+};
+
+// Updated swap transaction function with better error handling
+const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
+  try {
+    const response = await fetch('https://quote-api.jup.ag/v6/swap', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        quoteResponse,
+        userPublicKey,
+        wrapAndUnwrapSol: true,
+        // Add these parameters for better transaction handling
+        dynamicComputeUnitLimit: true,
+        prioritizationFeeLamports: 1000, // Small priority fee
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get Jupiter swap transaction: ${response.status} - ${errorText}`);
+    }
+
+    const swapData = await response.json();
+    
+    // Validate the swap transaction data
+    if (!swapData.swapTransaction) {
+      throw new Error('Invalid swap transaction data received');
+    }
+    
+    return swapData;
+  } catch (error) {
+    console.error('Jupiter swap transaction error:', error);
+    throw error;
+  }
+};
     return (
       <View style={{
         height: screenHeight,
@@ -408,7 +509,7 @@ export default function LiveBetsScreen() {
           flex: 1,
           justifyContent: 'flex-start',
           padding: 20,
-          backgroundColor: theme.card,
+          backgroundColor: getCardBackgroundColor(),
           borderRadius: 16,
           margin: 10,
           marginTop: 40,
@@ -418,11 +519,50 @@ export default function LiveBetsScreen() {
           shadowOpacity: themeName === 'light' ? 0.1 : 0.3,
           shadowRadius: 8,
           elevation: 10,
-          borderWidth: themeName === 'light' ? 1 : 0,
-          borderColor: theme.border,
+          borderWidth: themeName === 'light' ? 1 : 2,
+          borderColor: getBorderColor(),
         }}>
-          {/* Question with Typewriter Effect */}
-         
+          {/* Bet Type Badge */}
+          <View style={{ 
+            position: 'absolute', 
+            top: 16, 
+            right: 16, 
+            zIndex: 10,
+            backgroundColor: bet.betType === 'bonk' ? theme.orange : 
+                           bet.betType === 'timeless' ? theme.primary : theme.success,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: '#fff',
+          }}>
+            <Text style={{ 
+              fontSize: 10, 
+              fontFamily: 'PressStart2P-Regular',
+              color: '#fff',
+              textTransform: 'uppercase',
+            }}>
+              {bet.betType === 'bonk' ? '🪙 BONK' : 
+               bet.betType === 'timeless' ? '♾️ TIMELESS' : '🎯 STANDARD'}
+            </Text>
+          </View>
+
+          {/* Generated Image Display */}
+          {generatedImage && (
+            <View style={{ marginBottom: 20 }}>
+              <Image 
+                source={{ uri: generatedImage }} 
+                style={{ 
+                  width: '100%', 
+                  height: 200, 
+                  borderRadius: 12,
+                }} 
+                resizeMode="cover"
+              />
+            </View>
+          )}
+
+          {/* Question Display - Normal text without typewriter effect */}
           <View style={{ 
             paddingTop: 35,
             paddingBottom: 15, 
@@ -435,20 +575,9 @@ export default function LiveBetsScreen() {
               fontWeight: 'bold',
               color: "#1ba614",
               lineHeight: 32,
-              flexDirection: 'row',
-              flexWrap: 'wrap',
               fontFamily: 'PressStart2P-Regular'
             }}>
-              {displayedText}
-              {isTyping && (
-                <Animated.Text 
-                  style={{
-                    opacity: cursorAnim,
-                  }}
-                >
-                |
-                </Animated.Text>
-              )}
+              {bet.question}
             </Text>
           </View>
 
@@ -570,7 +699,7 @@ export default function LiveBetsScreen() {
                   textAlign: 'center',
                   fontFamily: 'PressStart2P-Regular'
                 }}>
-                  Enter amount of SOL to bet
+                  {bet.betType === 'bonk' ? 'Enter amount of BONK to bet' : 'Enter amount of SOL to bet'}
                 </Text>
                 
                 <TextInput
@@ -589,7 +718,7 @@ export default function LiveBetsScreen() {
                   value={betAmount}
                   onChangeText={setBetAmount}
                   keyboardType="decimal-pad"
-                  placeholder="0.1"
+                  placeholder={bet.betType === 'bonk' ? "100" : "0.1"}
                   placeholderTextColor={themeName === 'light' ? '#9ca3af' : '#666'}
                 />
                 
@@ -599,28 +728,52 @@ export default function LiveBetsScreen() {
                   width: '100%',
                   marginBottom: 24,
                 }}>
-                  {[0.1, 0.5, 1, 2].map((amount) => (
-                    <TouchableOpacity
-                      key={amount}
-                      style={{
-                        backgroundColor: betAmount === amount.toString() ? theme.primary : (themeName === 'light' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(139, 92, 246, 0.2)'),
-                        paddingVertical: 8,
-                        paddingHorizontal: 12,
-                        borderRadius: 8,
-                        borderWidth: 1,
-                        borderColor: theme.primary,
-                      }}
-                      onPress={() => setBetAmount(amount.toString())}
-                    >
-                      <Text style={{
-                        color: theme.text,
-                        fontWeight: betAmount === amount.toString() ? 'bold' : 'normal',
-                        fontFamily: 'PressStart2P-Regular'
-                      }}>
-                        {amount} SOL
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {bet.betType === 'bonk' ? 
+                    [100, 500].map((amount) => (
+                      <TouchableOpacity
+                        key={amount}
+                        style={{
+                          backgroundColor: betAmount === amount.toString() ? theme.orange : (themeName === 'light' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(249, 115, 22, 0.2)'),
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: theme.orange,
+                        }}
+                        onPress={() => setBetAmount(amount.toString())}
+                      >
+                        <Text style={{
+                          color: theme.text,
+                          fontWeight: betAmount === amount.toString() ? 'bold' : 'normal',
+                          fontFamily: 'PressStart2P-Regular'
+                        }}>
+                          {amount} BONK
+                        </Text>
+                      </TouchableOpacity>
+                    )) :
+                    [0.1, 0.5].map((amount) => (
+                      <TouchableOpacity
+                        key={amount}
+                        style={{
+                          backgroundColor: betAmount === amount.toString() ? theme.primary : (themeName === 'light' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(139, 92, 246, 0.2)'),
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: theme.primary,
+                        }}
+                        onPress={() => setBetAmount(amount.toString())}
+                      >
+                        <Text style={{
+                          color: theme.text,
+                          fontWeight: betAmount === amount.toString() ? 'bold' : 'normal',
+                          fontFamily: 'PressStart2P-Regular'
+                        }}>
+                          {amount} SOL
+                        </Text>
+                      </TouchableOpacity>
+                    ))
+                  }
                 </View>
                 
                 <View style={{
@@ -651,7 +804,7 @@ export default function LiveBetsScreen() {
                   
                   <TouchableOpacity
                     style={{
-                      backgroundColor: theme.primary,
+                      backgroundColor: bet.betType === 'bonk' ? theme.orange : theme.primary,
                       paddingVertical: 12,
                       paddingHorizontal: 20,
                       borderRadius: 12,
@@ -721,24 +874,43 @@ export default function LiveBetsScreen() {
                 <Ionicons name="wallet-outline" size={22} color={theme.success} />
               </View>
                              <Text style={{ marginBottom: 80,fontSize: 13, color: theme.success, fontWeight: 'bold', marginTop: 2, fontFamily: 'PressStart2P-Regular' }}>
-                {formatSolAmount(bet.solAmount)}
+                {bet.betType === 'bonk' ? 
+                  `${(bet.solAmount * 1000).toFixed(0)} BONK` : 
+                  `${bet.solAmount} SOL`
+                }
               </Text>
             </View>
           </View>
                      {/* Time tag positioned bottom left aligned with pool size */}
-           <View style={{
-             position: 'absolute',
-             bottom: 200,
-             left: 18,
-            flexDirection: 'row',
-            alignItems: 'center',
-            zIndex: 10
-          }}>
-            <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
-                         <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4, fontFamily: 'PressStart2P-Regular' }}>
-              {formatTimeLeft(bet.endTime)}
-            </Text>
-          </View>
+           {bet.betType !== 'timeless' ? (
+             <View style={{
+               position: 'absolute',
+               bottom: 200,
+               left: 18,
+              flexDirection: 'row',
+              alignItems: 'center',
+              zIndex: 10
+            }}>
+              <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
+                           <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4, fontFamily: 'PressStart2P-Regular' }}>
+                {formatTimeLeft(bet.endTime || '')}
+              </Text>
+            </View>
+           ) : (
+             <View style={{
+               position: 'absolute',
+               bottom: 200,
+               left: 18,
+              flexDirection: 'row',
+              alignItems: 'center',
+              zIndex: 10
+            }}>
+              <Ionicons name="infinite-outline" size={24} color={theme.primary} />
+                           <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.primary, marginLeft: 4, fontFamily: 'PressStart2P-Regular' }}>
+                TIMELESS
+              </Text>
+            </View>
+           )}
         </View>
       </View>
     );
