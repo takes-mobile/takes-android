@@ -15,6 +15,7 @@ import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { Connection, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram, VersionedTransaction } from '@solana/web3.js';
+import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createTransferInstruction } from '@solana/spl-token';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
@@ -1675,21 +1676,38 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
                     transaction.feePayer = fromPubkey;
                     transaction.recentBlockhash = blockhash;
                     transaction.lastValidBlockHeight = lastValidBlockHeight;
+
+                    // Send transaction using Privy wallet (like Jupiter swaps)
+                    if (!wallets?.[0]) {
+                      setSendError('No wallet found. Please ensure your wallet is connected.');
+                      return;
+                    }
+
+                    console.log('Sending transaction using Privy wallet...');
                     
-                    // For now, let's use a simpler approach that should work
-                    // We'll simulate the transaction and show a success message
-                    // TODO: Implement proper Privy wallet transaction signing
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
+                    // Get wallet and sign transaction using Privy (same as Jupiter swaps)
+                    const wallet = wallets[0];
+                    const provider = await wallet.getProvider();
+                    const { signature } = await provider.request({
+                      method: 'signAndSendTransaction',
+                      params: {
+                        transaction: transaction,
+                        connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+                      },
+                    });
                     
-                    // For testing purposes, we'll show success
-                    // In production, you'll need to implement the correct Privy wallet signing
-                    setSendSuccess(`Transaction simulated successfully! (Demo mode)`);
+                    console.log('Transaction sent successfully:', signature);
+                    
+                    setSendSuccess(`Transaction successful! Signature: ${signature.slice(0, 8)}...`);
                     setSendAddress('');
                     setSendAmount('');
                     
-                    // Simulate balance update
-                    const newBalance = parseFloat(solBalance || '0') - parseFloat(sendAmount);
-                    setSolBalance(newBalance.toFixed(4));
+                    // Refresh balance after successful transaction
+                    setTimeout(() => {
+                      if (account?.address) {
+                        fetchBalance();
+                      }
+                    }, 2000);
                     
                   } catch (e) {
                     const err = e as any;
@@ -2383,54 +2401,242 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             minHeight={48}
             minWidth={120}
             textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-              onPress={() => {
-                if (!withdrawAddress || !withdrawAmount) {
-                  Alert.alert('Error', 'Please enter address and amount');
-                  return;
-                }
-                
-                // Validate Solana address
-                try {
-                  new PublicKey(withdrawAddress);
-                } catch {
-                  Alert.alert('Error', 'Invalid Solana address');
-                  return;
-                }
-                
-                // Validate amount
-                const amount = parseFloat(withdrawAmount);
-                if (isNaN(amount) || amount <= 0) {
-                  Alert.alert('Error', 'Invalid amount');
-                  return;
-                }
-                
-                // Check if user has enough balance
-                const currentBalance = withdrawToken === 'SOL' ? 
-                  parseFloat(solBalance || '0') : 
-                  parseFloat(bonkBalance || '0');
-                
-                if (amount > currentBalance) {
-                  Alert.alert('Error', `Insufficient ${withdrawToken} balance`);
-                  return;
-                }
-                
-                // For now, just show success (demo mode)
-                Alert.alert(
-                  'Withdrawal Requested',
-                  `Withdrawal of ${withdrawAmount} ${withdrawToken} to ${withdrawAddress.slice(0, 8)}... has been submitted.`,
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        setShowWithdrawModal(false);
-                        setWithdrawAddress('');
-                        setWithdrawAmount('');
-                      }
-                    }
-                  ]
-                );
-              }}
-            />
+          // Fixed withdrawal function with better error handling
+onPress={async () => {
+  if (!withdrawAddress || !withdrawAmount) {
+    Alert.alert('Error', 'Please enter address and amount');
+    return;
+  }
+  
+  // Validate Solana address
+  let pubkey;
+  try {
+    pubkey = new PublicKey(withdrawAddress);
+  } catch {
+    Alert.alert('Error', 'Invalid Solana address');
+    return;
+  }
+  
+  // Validate amount
+  const amount = parseFloat(withdrawAmount);
+  if (isNaN(amount) || amount <= 0) {
+    Alert.alert('Error', 'Invalid amount');
+    return;
+  }
+  
+  // Check if user has enough balance
+  const currentBalance = withdrawToken === 'SOL' ? 
+    parseFloat(solBalance || '0') : 
+    parseFloat(bonkBalance || '0');
+  
+  if (amount > currentBalance) {
+    Alert.alert('Error', `Insufficient ${withdrawToken} balance`);
+    return;
+  }
+  
+  if (!wallets?.[0]) {
+    Alert.alert('Error', 'No wallet found. Please ensure your wallet is connected.');
+    return;
+  }
+  
+  if (!account?.address) {
+    Alert.alert('Error', 'Wallet address not available. Please try refreshing.');
+    return;
+  }
+  
+  try {
+    // Check if user has enough balance (including fees for SOL)
+    const currentBalanceNum = parseFloat(solBalance || '0');
+    const withdrawAmountNum = parseFloat(withdrawAmount);
+    const estimatedFee = 0.000005; // ~5000 lamports for transaction fee
+    
+    if (withdrawToken === 'SOL' && currentBalanceNum < withdrawAmountNum + estimatedFee) {
+      Alert.alert('Error', `Insufficient balance. You need ${(withdrawAmountNum + estimatedFee).toFixed(6)} SOL (including fees)`);
+      return;
+    }
+
+    // Use a more reliable RPC endpoint
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b', 'confirmed');
+    const fromPubkey = new PublicKey(account?.address || '');
+    const toPubkey = pubkey;
+    
+    let transaction;
+    
+    if (withdrawToken === 'SOL') {
+      // SOL transfer - Get fresh blockhash
+      const freshConnection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b', 'confirmed');
+      const { blockhash, lastValidBlockHeight } = await freshConnection.getLatestBlockhash();
+
+      transaction = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey,
+          toPubkey,
+          lamports: Math.floor(Number(withdrawAmount) * LAMPORTS_PER_SOL),
+        })
+      );
+      transaction.feePayer = fromPubkey;
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+    } else {
+      // BONK transfer - direct SPL token transfer
+      const bonkMint = new PublicKey('DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263');
+      const fromTokenAccount = await getAssociatedTokenAddress(bonkMint, fromPubkey);
+      const toTokenAccount = await getAssociatedTokenAddress(bonkMint, toPubkey);
+
+      const instructions = [];
+
+      // Check if recipient has token account, create if not
+      const toTokenAccountInfo = await connection.getAccountInfo(toTokenAccount);
+      if (!toTokenAccountInfo) {
+        // Recipient doesn't have token account, create it
+        instructions.push(
+          createAssociatedTokenAccountInstruction(
+            fromPubkey,       // payer
+            toTokenAccount,   // associated token address
+            toPubkey,         // owner
+            bonkMint          // token mint
+          )
+        );
+      }
+
+      const amountInSmallestUnit = Math.floor(Number(withdrawAmount) * 100000); // BONK has 5 decimals
+
+      instructions.push(
+        createTransferInstruction(
+          fromTokenAccount,
+          toTokenAccount,
+          fromPubkey,
+          amountInSmallestUnit
+        )
+      );
+
+      // Construct full transaction with fresh blockhash
+      const freshConnection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b', 'confirmed');
+      const { blockhash, lastValidBlockHeight } = await freshConnection.getLatestBlockhash();
+      
+      transaction = new Transaction().add(...instructions);
+      transaction.feePayer = fromPubkey;
+      transaction.recentBlockhash = blockhash;
+      transaction.lastValidBlockHeight = lastValidBlockHeight;
+    }
+
+    console.log(`Sending ${withdrawToken} transaction using Privy wallet...`);
+    
+    // Get wallet and sign transaction using Privy
+    const wallet = wallets[0];
+    const provider = await wallet.getProvider();
+    
+    // Sign transaction with Privy wallet
+    const { signedTransaction } = await provider.request({
+      method: 'signTransaction',
+      params: {
+        transaction: transaction,
+      },
+    });
+
+    console.log('Transaction signed successfully, sending to API...');
+
+    // Send signed transaction via API with better error handling
+    const response = await fetch('https://apipoolc.vercel.app/api/send-transaction', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        signedTransaction: Buffer.from(signedTransaction.serialize()).toString('base64'),
+        additionalSigners: [],
+      }),
+    });
+
+    // Check if response is ok and content-type is JSON
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const responseText = await response.text();
+      console.error('Non-JSON response received:', {
+        contentType,
+        body: responseText.substring(0, 500) // Log first 500 chars
+      });
+      throw new Error('Server returned non-JSON response. Please check if the API is working correctly.');
+    }
+
+    let result;
+    try {
+      const responseText = await response.text();
+      console.log('Raw API Response:', responseText);
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse JSON response:', parseError);
+      throw new Error('Invalid JSON response from server');
+    }
+
+    if (!result.success) {
+      console.error('API returned error:', result);
+      throw new Error(result.error || 'Transaction failed on server');
+    }
+
+    const signature = result.signature;
+    
+    console.log('Transaction sent successfully:', signature);
+    
+    Alert.alert(
+      'Withdrawal Successful! 🎉',
+      `Successfully sent ${withdrawAmount} ${withdrawToken}!\n\nTransaction: ${signature.slice(0, 8)}...`,
+      [
+        {
+          text: 'View on Solscan',
+          onPress: () => {
+            Linking.openURL(`https://solscan.io/tx/${signature}`);
+          }
+        },
+        {
+          text: 'OK',
+          onPress: () => {
+            setShowWithdrawModal(false);
+            setWithdrawAddress('');
+            setWithdrawAmount('');
+            // Refresh balance after successful transaction
+            setTimeout(() => {
+              if (account?.address) {
+                fetchBalance();
+              }
+            }, 2000);
+          }
+        }
+      ]
+    );
+    
+  } catch (e) {
+    const err = e as any;
+    console.error('Transaction error:', err);
+    
+    // Provide more specific error messages
+    if (err.message?.includes('insufficient funds')) {
+      Alert.alert('Error', 'Insufficient balance for transaction');
+    } else if (err.message?.includes('Invalid blockhash')) {
+      Alert.alert('Error', 'Network error. Please try again.');
+    } else if (err.message?.includes('signature')) {
+      Alert.alert('Error', 'Transaction signing failed. Please try again.');
+    } else if (err.message?.includes('non-JSON response')) {
+      Alert.alert('Error', 'Server error. The API might be down. Please try again later.');
+    } else if (err.message?.includes('API request failed')) {
+      Alert.alert('Error', 'Server connection failed. Please check your internet connection and try again.');
+    } else {
+      Alert.alert('Error', `Transaction failed: ${err.message || 'Unknown error'}`);
+    }
+  }
+}}
+          />
             
             <RetroButton
               title="CANCEL"
