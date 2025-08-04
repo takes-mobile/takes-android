@@ -42,6 +42,8 @@ const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
 
   return x.type;
 };
+const onSignTransactionRedirectLink = Linking.createURL("onSignTransaction");
+
 // Utility functions for Phantom deeplinks
 const decryptPayload = (data: string, nonce: string, sharedSecret: Uint8Array) => {
   if (!sharedSecret) throw new Error("missing shared secret");
@@ -571,7 +573,7 @@ export const UserScreen = () => {
 // 4. Fix the useEffect for deep link initialization
 
 // 2. Fix the deep link handler - add better state management
-const handleDeepLink = useCallback(({ url }: { url: string }) => {
+const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
   console.log("Received deep link:", url);
 
   try {
@@ -696,6 +698,66 @@ const handleDeepLink = useCallback(({ url }: { url: string }) => {
         }, 2000);
       } else {
         Alert.alert("Transaction Error", "No transaction signature received");
+      }
+    }
+
+    // Handle sign transaction response
+    if (urlObj.pathname.includes("onSignTransaction")) {
+      console.log("Processing Phantom sign transaction response");
+      
+      const nonce = params.get("nonce");
+      const data = params.get("data");
+      
+      if (nonce && data && sharedSecret) {
+        try {
+          // Decrypt the signed transaction data
+          const signedData = decryptPayload(data, nonce, sharedSecret);
+          
+          console.log("Successfully decrypted signed transaction data");
+          
+          // The signedData should contain the signed transaction
+          const signedTransaction = VersionedTransaction.deserialize(
+            bs58.decode(signedData.transaction)
+          );
+          
+          // Now send the signed transaction to the network
+          const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+          
+          const signature =  connection.sendTransaction(signedTransaction, {
+            skipPreflight: false,
+            preflightCommitment: 'confirmed',
+          });
+          
+          console.log("Transaction sent successfully:", signature);
+          
+          Alert.alert(
+            "Transaction Successful! 🎉",
+            `Transaction completed with signature: ${ (await signature).slice(0, 8)}...`,
+            [
+              {
+                text: "View on Explorer",
+                onPress: () => {
+                  Linking.openURL(`https://solscan.io/tx/${signature}`);
+                }
+              },
+              { text: "OK" }
+            ]
+          );
+          
+          // Refresh balance after successful transaction
+          setTimeout(() => {
+            if (account?.address) {
+              fetchBalance();
+            }
+          }, 2000);
+          
+        } catch (decryptError) {
+          console.error("Error processing signed transaction:", decryptError);
+          Alert.alert("Transaction Error", "Failed to process signed transaction");
+        }
+      } else {
+        console.log("Missing required sign transaction parameters");
+        Alert.alert("Transaction Error", "Invalid response from Phantom wallet");
       }
     }
 
@@ -1040,46 +1102,74 @@ useEffect(() => {
     }
   };
 
-    // Fixed transfer functions - Since Phantom transfer deep link isn't implemented, we'll use a different approach
-  const handlePhantomTransfer = useCallback(async (amount: string) => {
-    if (!phantomWalletPublicKey || !account?.address) {
-      Alert.alert("Error", "No wallet connected or no recipient address");
+// Enhanced handlePhantomTransfer function for your UserScreen component
+const handlePhantomTransfer = useCallback(async (amount: string) => {
+  if (!phantomWalletPublicKey || !account?.address || !sharedSecret || !session) {
+    Alert.alert("Error", "Phantom wallet not properly connected");
+    return;
+  }
+
+  try {
+    console.log(`Creating transfer of ${amount} SOL from Phantom to app wallet`);
+    
+    const amountLamports = Math.floor(Number(amount) * LAMPORTS_PER_SOL);
+    if (isNaN(amountLamports) || amountLamports <= 0) {
+      Alert.alert("Error", "Invalid amount entered");
       return;
     }
 
-    try {
-      console.log(`Creating transfer of ${amount} SOL from Phantom to app wallet`);
-      
-      // Since Phantom transfer deep link isn't implemented, we'll show instructions
-      Alert.alert(
-        "Manual Transfer Required",
-        `Please manually transfer ${amount} SOL from your Phantom wallet to:\n\n${account.address}\n\nCopy the address and open Phantom to complete the transfer.`,
-        [
-          {
-            text: "Copy Address",
-            onPress: async () => {
-              try {
-                await Clipboard.setStringAsync(account.address);
-                Alert.alert("Address Copied", "Wallet address copied to clipboard!");
-              } catch (error) {
-                console.error("Error copying address:", error);
-              }
-            }
-          },
-          {
-            text: "Open Phantom",
-            onPress: () => {
-              Linking.openURL("https://phantom.app/");
-            }
-          },
-          { text: "Cancel" }
-        ]
-      );
-    } catch (error) {
-      console.error("Error creating Phantom transfer:", error);
-      Alert.alert("Transfer Error", `Failed to create transfer: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }, [phantomWalletPublicKey, account?.address]);
+    // Create a connection
+    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
+    
+    // Create the transaction
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: phantomWalletPublicKey,
+        toPubkey: new PublicKey(account.address),
+        lamports: amountLamports,
+      })
+    );
+
+    // Set transaction properties
+    transaction.feePayer = phantomWalletPublicKey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+    // Serialize the transaction
+    const serializedTransaction = transaction.serialize({
+      requireAllSignatures: false,
+    });
+
+    // Create the payload for Phantom - using signTransaction instead of signAndSendTransaction
+    const payload = {
+      session,
+      transaction: bs58.encode(Uint8Array.from(serializedTransaction)),
+    };
+
+    // Encrypt the payload
+    const [nonce, encryptedPayload] = encryptPayload(payload, sharedSecret);
+
+    // Build the deeplink parameters for signTransaction
+    const params = new URLSearchParams({
+      dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+      nonce: bs58.encode(nonce),
+      redirect_link: onSignTransactionRedirectLink,
+      payload: bs58.encode(encryptedPayload),
+    });
+
+    // Build and open the deeplink for signTransaction
+    const phantomUrl = buildUrl("signTransaction", params);
+    console.log("Opening Phantom for signing transaction:", phantomUrl);
+    
+    await Linking.openURL(phantomUrl);
+    
+  } catch (error) {
+    console.error("Error creating Phantom transfer:", error);
+    Alert.alert("Transfer Error", `Failed to create transfer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}, [phantomWalletPublicKey, account?.address, sharedSecret, session, dappKeyPair.publicKey, onSignTransactionRedirectLink]);
+
+
+
 
   // Open settings modal with animation
   const openSettingsModal = () => {
@@ -1555,7 +1645,7 @@ useEffect(() => {
                     }
 
                     // Use a more reliable RPC endpoint
-                    const connection = new Connection('https://solana-mainnet.rpc.extrnode.com', 'confirmed');
+                    const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b', 'confirmed');
                     const fromPubkey = new PublicKey(account?.address || '');
                     const toPubkey = pubkey;
                     
@@ -1825,172 +1915,238 @@ useEffect(() => {
 
       {/* Add Funds Modal */}
       <Modal
-        visible={showAddFundsModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddFundsModal(false)}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
-          onPress={() => setShowAddFundsModal(false)}
-        />
-        <View style={{ 
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: theme.modal,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          padding: 28,
-          shadowColor: theme.shadow,
-          shadowOffset: { width: 0, height: -10 },
-          shadowOpacity: 0.3,
-          shadowRadius: 20,
-          elevation: 20,
+  visible={showAddFundsModal}
+  animationType="slide"
+  transparent
+  onRequestClose={() => setShowAddFundsModal(false)}
+>
+  <Pressable
+    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+    onPress={() => setShowAddFundsModal(false)}
+  />
+  <View style={{ 
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.modal,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 28,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  }}>
+    {/* Handle */}
+    <View style={{
+      width: 40,
+      height: 4,
+      backgroundColor: theme.subtext,
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: 24,
+    }} />
+    
+    <Text style={{ 
+      fontSize: 18, 
+      fontFamily: 'PressStart2P-Regular',
+      color: theme.green, 
+      marginBottom: 24, 
+      textAlign: 'center',
+      textShadowColor: 'rgba(0,0,0,0.7)',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 0,
+    }}>
+      ADD FUNDS
+    </Text>
+    
+    {/* Connection Status */}
+    {phantomWalletPublicKey ? (
+      <View style={{
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: theme.green + '40',
+        alignItems: 'center',
+      }}>
+        <Text style={{
+          fontSize: 12,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.green,
+          marginBottom: 8,
         }}>
-          {/* Handle */}
-          <View style={{
-            width: 40,
-            height: 4,
-            backgroundColor: theme.subtext,
-            borderRadius: 2,
-            alignSelf: 'center',
-            marginBottom: 24,
-          }} />
-          
-          <Text style={{ 
-            fontSize: 18, 
+          ✓ PHANTOM CONNECTED
+        </Text>
+        <Text style={{
+          fontSize: 10,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.subtext,
+        }}>
+          {phantomWalletPublicKey.toString().slice(0, 8)}...{phantomWalletPublicKey.toString().slice(-8)}
+        </Text>
+      </View>
+    ) : (
+      <View style={{
+        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: theme.orange + '40',
+        alignItems: 'center',
+      }}>
+        <Text style={{
+          fontSize: 12,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.orange,
+          marginBottom: 8,
+        }}>
+          PHANTOM NOT CONNECTED
+        </Text>
+        <Text style={{
+          fontSize: 10,
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.subtext,
+        }}>
+          Connect your wallet first
+        </Text>
+      </View>
+    )}
+    
+    <Text style={{ 
+      color: theme.text, 
+      fontSize: 12, 
+      fontFamily: 'PressStart2P-Regular',
+      marginBottom: 16, 
+      textAlign: 'center' 
+    }}>
+      ENTER AMOUNT (SOL):
+    </Text>
+    
+    <TextInput
+      style={{ 
+        width: '100%', 
+        borderWidth: 3, 
+        borderColor: theme.green, 
+        borderRadius: 16, 
+        padding: 14, 
+        marginBottom: 24, 
+        fontSize: 16, 
+        backgroundColor: theme.input, 
+        fontWeight: 'bold', 
+        color: theme.text,
+        fontFamily: 'PressStart2P-Regular',
+      }}
+      placeholder="0.1"
+      value={addFundsAmount}
+      onChangeText={setAddFundsAmount}
+      keyboardType="decimal-pad"
+      placeholderTextColor={theme.placeholder}
+    />
+    
+    {/* Quick Amount Buttons */}
+    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 }}>
+      {['0.1', '0.5', '1.0'].map((quickAmount) => (
+        <TouchableOpacity
+          key={quickAmount}
+          style={{
+            backgroundColor: theme.input,
+            borderRadius: 12,
+            padding: 12,
+            borderWidth: 2,
+            borderColor: theme.border,
+            minWidth: 60,
+            alignItems: 'center',
+          }}
+          onPress={() => setAddFundsAmount(quickAmount)}
+        >
+          <Text style={{
+            color: theme.text,
+            fontSize: 12,
             fontFamily: 'PressStart2P-Regular',
-            color: theme.green, 
-            marginBottom: 24, 
-            textAlign: 'center',
-            textShadowColor: 'rgba(0,0,0,0.7)',
-            textShadowOffset: { width: 1, height: 1 },
-            textShadowRadius: 0,
           }}>
-            ADD FUNDS / CONNECT WALLET
+            {quickAmount}
           </Text>
-          
-          <Text style={{ 
-            color: theme.text, 
-            fontSize: 12, 
+        </TouchableOpacity>
+      ))}
+    </View>
+    
+    <View style={{ gap: 12 }}>
+      {/* Connect/Transfer Button */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: phantomWalletPublicKey ? '#4CAF50' : '#9945FF',
+          borderRadius: 12,
+          padding: 16,
+          alignItems: 'center',
+          borderWidth: 2,
+          borderColor: theme.border,
+          opacity: connectingToPhantom ? 0.7 : 1,
+        }}
+        onPress={() => {
+          if (phantomWalletPublicKey) {
+            // If connected, proceed with transfer
+            if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
+              Alert.alert('Error', 'Please enter a valid amount');
+              return;
+            }
+            handlePhantomTransfer(addFundsAmount);
+            setShowAddFundsModal(false);
+            setAddFundsAmount('');
+          } else {
+            // If not connected, connect first
+            connectToPhantom();
+          }
+        }}
+        disabled={connectingToPhantom}
+      >
+        {connectingToPhantom ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={{
+            color: '#fff',
+            fontSize: 14,
             fontFamily: 'PressStart2P-Regular',
-            marginBottom: 16, 
-            textAlign: 'center' 
+            fontWeight: 'bold',
           }}>
-            ENTER AMOUNT (SOL):
+            {phantomWalletPublicKey ? 
+              `TRANSFER ${addFundsAmount || '0'} SOL` : 
+              'CONNECT PHANTOM'}
           </Text>
-          
-          <TextInput
-            style={{ 
-              width: '100%', 
-              borderWidth: 3, 
-              borderColor: theme.green, 
-              borderRadius: 16, 
-              padding: 14, 
-              marginBottom: 24, 
-              fontSize: 16, 
-              backgroundColor: theme.input, 
-              fontWeight: 'bold', 
-              color: theme.text,
-              fontFamily: 'PressStart2P-Regular',
-            }}
-            placeholder="0.1"
-            value={addFundsAmount}
-            onChangeText={setAddFundsAmount}
-            keyboardType="decimal-pad"
-            placeholderTextColor={theme.placeholder}
-          />
-          
-          <Text style={{ 
-            color: theme.subtext, 
-            fontSize: 10, 
-            fontFamily: 'PressStart2P-Regular',
-            marginBottom: 20, 
-            textAlign: 'center' 
-          }}>
-            CHOOSE WALLET:
-          </Text>
-          
-          {/* Connect Phantom Button with status */}
-          <TouchableOpacity
-            style={{
-              backgroundColor: phantomWalletPublicKey ? '#4CAF50' : '#9945FF',
-              borderRadius: 12,
-              padding: 16,
-              alignItems: 'center',
-              borderWidth: 2,
-              borderColor: theme.border,
-              marginBottom: 12,
-            }}
-            onPress={() => {
-              if (phantomWalletPublicKey) {
-                // If connected, proceed with transfer
-                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
-                  Alert.alert('Error', 'Please enter a valid amount');
-                  return;
-                }
-                handlePhantomTransfer(addFundsAmount);
-                setShowAddFundsModal(false);
-                setAddFundsAmount('');
-              } else {
-                // If not connected, connect first
-                connectToPhantom();
-              }
-            }}
-            disabled={connectingToPhantom}
-          >
-            {connectingToPhantom ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{
-                color: '#fff',
-                fontSize: 14,
-                fontFamily: 'PressStart2P-Regular',
-                fontWeight: 'bold',
-              }}>
-                {phantomWalletPublicKey ? 
-                  `✓ CONNECTED - ADD FUNDS` : 
-                  'CONNECT PHANTOM'}
-              </Text>
-            )}
-          </TouchableOpacity>
-          
-          <View style={{ gap: 12 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#9945FF',
-                borderRadius: 12,
-                padding: 16,
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: theme.border,
-              }}
-              onPress={() => {
-                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
-                  Alert.alert('Error', 'Please enter a valid amount');
-                  return;
-                }
-                handlePhantomTransfer(addFundsAmount);
-                setShowAddFundsModal(false);
-                setAddFundsAmount('');
-              }}
-            >
-              <Text style={{
-                color: '#fff',
-                fontSize: 14,
-                fontFamily: 'PressStart2P-Regular',
-                fontWeight: 'bold',
-              }}>
-                PHANTOM WALLET
-              </Text>
-            </TouchableOpacity>
-            
-
-          </View>
-        </View>
-      </Modal>
+        )}
+      </TouchableOpacity>
+      
+      {/* Cancel Button */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: theme.input,
+          borderRadius: 12,
+          padding: 16,
+          alignItems: 'center',
+          borderWidth: 2,
+          borderColor: theme.border,
+        }}
+        onPress={() => {
+          setShowAddFundsModal(false);
+          setAddFundsAmount('');
+        }}
+      >
+        <Text style={{
+          color: theme.text,
+          fontSize: 14,
+          fontFamily: 'PressStart2P-Regular',
+          fontWeight: 'bold',
+        }}>
+          CANCEL
+        </Text>
+      </TouchableOpacity>
+    </View>
+  </View>
+</Modal>
 
       {/* Withdraw Modal */}
       <Modal
