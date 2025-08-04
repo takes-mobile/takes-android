@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useContext, useRef } from "react";
-import { Text, TextInput, View, Button, ScrollView, Image, TouchableOpacity, Alert, Modal, ActivityIndicator, ImageBackground, SafeAreaView, Dimensions, Pressable, Animated } from "react-native";
+import { Text, TextInput, View, Button, ScrollView, Image, TouchableOpacity, Alert, Modal, ActivityIndicator, ImageBackground, SafeAreaView, Dimensions, Pressable, Animated, EmitterSubscription } from "react-native";
 import { useBets } from "../context/BetsContext";
 
 import {
@@ -42,6 +42,55 @@ const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
 
   return x.type;
 };
+// Utility functions for Phantom deeplinks
+const decryptPayload = (data: string, nonce: string, sharedSecret: Uint8Array) => {
+  if (!sharedSecret) throw new Error("missing shared secret");
+  
+  try {
+    console.log('Attempting to decrypt with:', {
+      dataLength: data.length,
+      nonceLength: nonce.length,
+      sharedSecretLength: sharedSecret.length
+    });
+    
+    const decryptedData = nacl.box.open.after(
+      bs58.decode(data),
+      bs58.decode(nonce),
+      sharedSecret
+    );
+    
+    if (!decryptedData) {
+      throw new Error("Unable to decrypt data - decryption returned null");
+    }
+    
+    return JSON.parse(Buffer.from(decryptedData).toString("utf8"));
+  } catch (error) {
+    console.error('Decryption error details:', error);
+    console.error('Data sample:', data.substring(0, 50) + '...');
+    console.error('Nonce:', nonce);
+    throw error;
+  }
+};
+
+const encryptPayload = (payload: any, sharedSecret: Uint8Array<ArrayBufferLike>) => {
+  if (!sharedSecret) throw new Error("missing shared secret");
+  const nonce = nacl.randomBytes(24);
+  const payloadUint8 = new TextEncoder().encode(JSON.stringify(payload));
+  const encryptedPayload = nacl.box.after(
+    payloadUint8,
+    nonce,
+    sharedSecret
+  );
+  return [nonce, encryptedPayload];
+};
+
+// Create redirect links for Phantom deeplinks
+const onConnectRedirectLink = Linking.createURL("onConnect");
+const onDisconnectRedirectLink = Linking.createURL("onDisconnect");  
+const onSignAndSendTransactionRedirectLink = Linking.createURL("onSignAndSendTransaction");
+
+const buildUrl = (path: any, params: { toString: () => any; }) => 
+  `https://phantom.app/ul/v1/${path}?${params.toString()}`;
 
 // BetCard component for user's bets
 const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: { 
@@ -385,7 +434,10 @@ export const UserScreen = () => {
   const [session, setSession] = useState<string>();
   const [deepLink, setDeepLink] = useState<string>('');
   const [phantomSession, setPhantomSession] = useState<string | null>(null);
+  const [phantomWalletPublicKey, setPhantomWalletPublicKey] = useState<PublicKey | null>(null);
   const [connectingToPhantom, setConnectingToPhantom] = useState(false);
+  const [lastProcessedDeepLink, setLastProcessedDeepLink] = useState<string>('');
+  const [lastProcessedTime, setLastProcessedTime] = useState<number>(0);
   const [solPrice, setSolPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'previous'>('live');
   const [userBets, setUserBets] = useState<any[]>([]);
@@ -516,170 +568,218 @@ export const UserScreen = () => {
     }
   }, [user, account?.address, create]);
 
-  // Initialize deeplinks only once
-  useEffect(() => {
-    let linkingSubscription: any;
+// 4. Fix the useEffect for deep link initialization
 
-    const initializeDeeplinks = async () => {
-      // Handle initial URL if app was opened via deeplink
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        handleDeepLink({ url: initialUrl });
-      }
+// 2. Fix the deep link handler - add better state management
+const handleDeepLink = useCallback(({ url }: { url: string }) => {
+  console.log("Received deep link:", url);
 
-      // Listen for incoming links
-      linkingSubscription = Linking.addEventListener("url", handleDeepLink);
-    };
+  try {
+    const urlObj = new URL(url);
+    const params = urlObj.searchParams;
 
-    initializeDeeplinks();
+    console.log("Processing deeplink pathname:", urlObj.pathname);
+    console.log("URL params:", Object.fromEntries(params.entries()));
 
-    return () => {
-      if (linkingSubscription) {
-        linkingSubscription.remove();
-      }
-    };
-  }, []); // Empty dependency array - only run once
-
-  // Improved deeplink handler
-  const handleDeepLink = useCallback(({ url }: { url: string }) => {
-    console.log("Received deep link:", url);
-
-    // Prevent processing the same URL multiple times
-    if (url === deepLink) {
+    // Only process Phantom-related deep links
+    if (!urlObj.pathname.includes("onConnect") && 
+        !urlObj.pathname.includes("onDisconnect") && 
+        !urlObj.pathname.includes("onSignAndSendTransaction")) {
+      console.log("Ignoring non-Phantom deep link");
       return;
     }
-    setDeepLink(url);
 
-    try {
-      const urlObj = new URL(url);
-      const params = urlObj.searchParams;
+    // Handle errors first
+    if (params.get("errorCode")) {
+      const errorMessage = params.get("errorMessage") || "Unknown error occurred";
+      console.log("Phantom error:", errorMessage);
+      Alert.alert("Wallet Error", errorMessage);
+      setConnectingToPhantom(false);
+      return;
+    }
 
-      // Handle errors
-      if (params.get("errorCode")) {
-        const errorMessage = params.get("errorMessage") || "Unknown error occurred";
-        console.log("Phantom error:", errorMessage);
-        Alert.alert("Wallet Error", errorMessage);
-        setConnectingToPhantom(false);
-        return;
-      }
+    // Handle connect response
+    if (urlObj.pathname.includes("onConnect")) {
+      console.log("Processing Phantom connect response");
+      
+      const phantomEncryptionPubkey = params.get("phantom_encryption_public_key");
+      const nonce = params.get("nonce");
+      const data = params.get("data");
+      
+      console.log('Connect params:', {
+        phantomKey: phantomEncryptionPubkey?.substring(0, 20) + '...',
+        nonce: nonce?.substring(0, 20) + '...',
+        dataLength: data?.length
+      });
+      
+      if (phantomEncryptionPubkey && nonce && data) {
+        try {
+          // Create shared secret using the correct key pair
+          const phantomPublicKey = bs58.decode(phantomEncryptionPubkey);
+          const sharedSecretDapp = nacl.box.before(
+            phantomPublicKey,
+            dappKeyPair.secretKey
+          );
 
-      // Handle connect response
-      if (urlObj.pathname.includes("onConnect")) {
-        console.log("Processing Phantom connect response");
-        
-        const phantomEncryptionPubkey = params.get("phantom_encryption_public_key");
-        const nonce = params.get("nonce");
-        const data = params.get("data");
-        
-        if (phantomEncryptionPubkey && nonce && data) {
-          console.log("Phantom connection successful!");
-          setPhantomSession(`${phantomEncryptionPubkey}-${nonce}`);
+          console.log('Shared secret created, length:', sharedSecretDapp.length);
+
+          // Decrypt the connection data
+          const connectData = decryptPayload(data, nonce, sharedSecretDapp);
+          
+          console.log("Successfully decrypted connect data:", {
+            publicKey: connectData.public_key,
+            sessionLength: connectData.session?.length
+          });
+
+          // Store connection state
+          setSharedSecret(sharedSecretDapp);
+          setSession(connectData.session);
+          setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
           setConnectingToPhantom(false);
           
           Alert.alert(
             "Phantom Connected! 🎉",
-            "Successfully connected to Phantom wallet!",
+            `Successfully connected to ${connectData.public_key.slice(0, 8)}...`,
             [{ text: "OK" }]
           );
-        } else {
-          console.log("Missing connection parameters");
+        } catch (decryptError) {
+          console.error("Error decrypting connection data:", decryptError);
+          Alert.alert(
+            "Connection Error", 
+            "Failed to decrypt Phantom response. Please try connecting again."
+          );
           setConnectingToPhantom(false);
         }
+      } else {
+        console.log("Missing required connection parameters");
+        Alert.alert("Connection Error", "Invalid response from Phantom wallet");
+        setConnectingToPhantom(false);
       }
+    }
 
-      // Handle disconnect response
-      if (urlObj.pathname.includes("onDisconnect")) {
-        console.log("Phantom disconnected");
-        setPhantomSession(null);
-        Alert.alert("Phantom Disconnected", "Your Phantom wallet has been disconnected.");
-      }
+    // Handle disconnect response
+    if (urlObj.pathname.includes("onDisconnect")) {
+      console.log("Phantom disconnected"); 
+      setPhantomWalletPublicKey(null);
+      setSession(undefined);
+      setSharedSecret(undefined);
+      Alert.alert("Phantom Disconnected", "Your Phantom wallet has been disconnected.");
+    }
 
-      // Handle transaction response
-      if (urlObj.pathname.includes("onSignAndSendTransaction")) {
-        console.log("Processing Phantom transaction response");
-        const signature = params.get("signature");
+    // Handle transaction response
+    if (urlObj.pathname.includes("onSignAndSendTransaction")) {
+      console.log("Processing Phantom transaction response");
+      
+      const signature = params.get("signature");
+      
+      if (signature) {
+        console.log("Transaction signature:", signature);
+        Alert.alert(
+          "Transaction Successful! 🎉",
+          `Transaction completed with signature: ${signature.slice(0, 8)}...`,
+          [
+            {
+              text: "View on Explorer",
+              onPress: () => {
+                Linking.openURL(`https://solscan.io/tx/${signature}`);
+              }
+            },
+            { text: "OK" }
+          ]
+        );
         
-        if (signature) {
-          console.log("Transaction signature:", signature);
-          Alert.alert(
-            "Transaction Successful! 🎉",
-            `Transaction completed with signature: ${signature.slice(0, 8)}...`,
-            [
-              {
-                text: "View on Explorer",
-                onPress: () => {
-                  Linking.openURL(`https://solscan.io/tx/${signature}`);
-                }
-              },
-              { text: "OK" }
-            ]
-          );
-          
-          // Refresh balance after successful transaction
-          setTimeout(() => {
-            if (account?.address) {
-              fetchBalance();
-            }
-          }, 2000);
-        }
+        // Refresh balance after successful transaction
+        setTimeout(() => {
+          if (account?.address) {
+            fetchBalance();
+          }
+        }, 2000);
+      } else {
+        Alert.alert("Transaction Error", "No transaction signature received");
+      }
+    }
+
+  } catch (error) {
+    console.error("Error processing deep link:", error);
+    setConnectingToPhantom(false);
+    Alert.alert("Deeplink Error", "Failed to process wallet response");
+  }
+}, [dappKeyPair.secretKey, account?.address, fetchBalance]);
+
+// 3. Fix the connection function - ensure proper key generation
+const connectToPhantom = useCallback(async () => {
+  if (connectingToPhantom) {
+    console.log("Already connecting to Phantom, skipping...");
+    return;
+  }
+
+  setConnectingToPhantom(true);
+  
+  try {
+    console.log("Initiating Phantom connection...");
+    console.log("Dapp public key:", bs58.encode(dappKeyPair.publicKey));
+    
+    const params = new URLSearchParams({
+      dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
+      cluster: "mainnet-beta",
+      app_url: "https://takes-app.vercel.app/",
+      redirect_link: onConnectRedirectLink,
+    });
+
+    const phantomUrl = buildUrl("connect", params);
+    console.log("Opening Phantom URL:", phantomUrl);
+    
+    const canOpen = await Linking.openURL(phantomUrl);
+    if (!canOpen) {
+      throw new Error("Cannot open Phantom app. Please install Phantom wallet.");
+    }
+    
+    await Linking.openURL(phantomUrl);
+  } catch (error) {
+    console.error("Error connecting to Phantom:", error);
+    Alert.alert("Connection Error",  error as string, "Failed to connect to Phantom wallet." as any);
+    setConnectingToPhantom(false); 
+  }
+}, [connectingToPhantom, dappKeyPair.publicKey, onConnectRedirectLink]);
+
+
+// 4. Fix the useEffect for deep link initialization
+useEffect(() => {
+  let linkingSubscription: EmitterSubscription;
+
+  const initializeDeeplinks = async () => {
+    try {
+      // Handle initial URL if app was opened via deeplink
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        console.log("Initial URL:", initialUrl);
+        // Add a delay to ensure component is fully mounted
+        setTimeout(() => {
+          handleDeepLink({ url: initialUrl });
+        }, 500);
       }
 
-    } catch (error) {
-      console.error("Error processing deep link:", error);
-      setConnectingToPhantom(false);
-    }
-  }, [deepLink, account?.address]);
-
-  // Fixed Phantom connection function
-  const connectToPhantom = useCallback(async () => {
-    // if (connectingToPhantom) {
-    //   console.log("Already connecting to Phantom, skipping...");
-    //   return;
-    // }
-
-    setConnectingToPhantom(true);
-    
-    try {
-      const appUrl =  Linking.createURL("");
-      const onConnectRedirectLink = `${appUrl}onConnect`;
-      
-      console.log("App URL:", appUrl);
-      console.log("Connect redirect:", onConnectRedirectLink);
-      
-      const params = new URLSearchParams({
-        dapp_encryption_public_key: bs58.encode(dappKeyPair.publicKey),
-        cluster: "mainnet-beta",
-        app_url: "https://takes-app.vercel.app/",
-        redirect_link: onConnectRedirectLink,
+      // Listen for incoming links
+      linkingSubscription = Linking.addEventListener("url", (event) => {
+        console.log("URL event received:", event.url);
+        // Add a small delay here too
+        setTimeout(() => {
+          handleDeepLink(event);
+        }, 100);
       });
-
-      const phantomUrl = `https://phantom.app/ul/v1/connect?${params.toString()}`;
-      console.log("Opening Phantom URL:", phantomUrl);
-      
-    await Linking.openURL(phantomUrl);
-      // if (canOpen) {
-      //   await Linking.openURL(phantomUrl);
-      // } else {
-      //   Alert.alert(
-      //     "Phantom Not Found",
-      //     "Please install Phantom wallet from the App Store first.",
-      //     [
-      //       {
-      //         text: "Install Phantom",
-      //         onPress: () => {
-      //           Linking.openURL("https://phantom.app/download");
-      //         }
-      //       },
-      //       { text: "Cancel", onPress: () => setConnectingToPhantom(false) }
-      //     ]
-      //   );
-      // }
     } catch (error) {
-      console.error("Error connecting to Phantom:", error);
-      Alert.alert("Connection Error", "Failed to connect to Phantom wallet.");
-      setConnectingToPhantom(false);
+      console.error("Error initializing deeplinks:", error);
     }
-  }, [connectingToPhantom, dappKeyPair.publicKey]);
+  };
+
+  initializeDeeplinks();
+
+  return () => {
+    if (linkingSubscription) {
+      linkingSubscription.remove();
+    }
+  };
+}, [handleDeepLink]); // Add handleDeepLink to dependencies
 
   // Fetch user's bets
   const fetchUserBets = async () => {
@@ -940,92 +1040,46 @@ export const UserScreen = () => {
     }
   };
 
-  // Fixed transfer functions
+    // Fixed transfer functions - Since Phantom transfer deep link isn't implemented, we'll use a different approach
   const handlePhantomTransfer = useCallback(async (amount: string) => {
-    if (!account?.address) {
-      Alert.alert("Error", "No wallet address found");
+    if (!phantomWalletPublicKey || !account?.address) {
+      Alert.alert("Error", "No wallet connected or no recipient address");
       return;
     }
 
-    if (!phantomSession) {
+    try {
+      console.log(`Creating transfer of ${amount} SOL from Phantom to app wallet`);
+      
+      // Since Phantom transfer deep link isn't implemented, we'll show instructions
       Alert.alert(
-        "Phantom Not Connected",
-        "Please connect to Phantom wallet first.",
+        "Manual Transfer Required",
+        `Please manually transfer ${amount} SOL from your Phantom wallet to:\n\n${account.address}\n\nCopy the address and open Phantom to complete the transfer.`,
         [
           {
-            text: "Connect",
-            onPress: connectToPhantom
+            text: "Copy Address",
+            onPress: async () => {
+              try {
+                await Clipboard.setStringAsync(account.address);
+                Alert.alert("Address Copied", "Wallet address copied to clipboard!");
+              } catch (error) {
+                console.error("Error copying address:", error);
+              }
+            }
+          },
+          {
+            text: "Open Phantom",
+            onPress: () => {
+              Linking.openURL("https://phantom.app/");
+            }
           },
           { text: "Cancel" }
         ]
       );
-      return;
-    }
-
-    try {
-      const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
-      const appUrl = await Linking.createURL("");
-      const redirectLink = `${appUrl}onSignAndSendTransaction`;
-      
-      // Create the transfer URL using Phantom's format
-      const transferParams = new URLSearchParams({
-        recipient: account.address,
-        amount: lamports.toString(),
-        spl_token: "", // Empty for SOL transfers
-        redirect_link: redirectLink,
-      });
-
-      const transferUrl = `https://phantom.app/ul/v1/transfer?${transferParams.toString()}`;
-      console.log("Opening Phantom transfer URL:", transferUrl);
-      
-      const canOpen = await Linking.canOpenURL(transferUrl);
-      if (canOpen) {
-        await Linking.openURL(transferUrl);
-      } else {
-        Alert.alert("Error", "Cannot open Phantom wallet");
-      }
     } catch (error) {
       console.error("Error creating Phantom transfer:", error);
-      Alert.alert("Error", "Failed to create transfer request");
+      Alert.alert("Transfer Error", `Failed to create transfer: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [account?.address, phantomSession, connectToPhantom]);
-
-  const handleSolflareTransfer = useCallback(async (amount: string) => {
-    if (!account?.address) {
-      Alert.alert("Error", "No wallet address found");
-      return;
-    }
-
-    try {
-      const lamports = Math.floor(parseFloat(amount) * LAMPORTS_PER_SOL);
-      
-      // Solflare uses a different URL format
-      const transferUrl = `https://solflare.com/ul/v1/transfer?recipient=${account.address}&amount=${lamports}&token=SOL`;
-      console.log("Opening Solflare transfer URL:", transferUrl);
-      
-      const canOpen = await Linking.canOpenURL(transferUrl);
-      if (canOpen) {
-        await Linking.openURL(transferUrl);
-      } else {
-        Alert.alert(
-          "Solflare Not Found",
-          "Please install Solflare wallet first.",
-          [
-            {
-              text: "Install Solflare",
-              onPress: () => {
-                Linking.openURL("https://solflare.com/download");
-              }
-            },
-            { text: "Cancel" }
-          ]
-        );
-      }
-    } catch (error) {
-      console.error("Error creating Solflare transfer:", error);
-      Alert.alert("Error", "Failed to create transfer request");
-    }
-  }, [account?.address]);
+  }, [phantomWalletPublicKey, account?.address]);
 
   // Open settings modal with animation
   const openSettingsModal = () => {
@@ -1862,7 +1916,7 @@ export const UserScreen = () => {
           {/* Connect Phantom Button with status */}
           <TouchableOpacity
             style={{
-              backgroundColor: phantomSession ? '#4CAF50' : '#9945FF',
+              backgroundColor: phantomWalletPublicKey ? '#4CAF50' : '#9945FF',
               borderRadius: 12,
               padding: 16,
               alignItems: 'center',
@@ -1870,8 +1924,22 @@ export const UserScreen = () => {
               borderColor: theme.border,
               marginBottom: 12,
             }}
-            onPress={connectToPhantom}
-            // disabled={connectingToPhantom}
+            onPress={() => {
+              if (phantomWalletPublicKey) {
+                // If connected, proceed with transfer
+                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
+                  Alert.alert('Error', 'Please enter a valid amount');
+                  return;
+                }
+                handlePhantomTransfer(addFundsAmount);
+                setShowAddFundsModal(false);
+                setAddFundsAmount('');
+              } else {
+                // If not connected, connect first
+                connectToPhantom();
+              }
+            }}
+            disabled={connectingToPhantom}
           >
             {connectingToPhantom ? (
               <ActivityIndicator color="#fff" />
@@ -1882,7 +1950,9 @@ export const UserScreen = () => {
                 fontFamily: 'PressStart2P-Regular',
                 fontWeight: 'bold',
               }}>
-                {phantomSession ? '✓ PHANTOM CONNECTED' : 'CONNECT PHANTOM'}
+                {phantomWalletPublicKey ? 
+                  `✓ CONNECTED - ADD FUNDS` : 
+                  'CONNECT PHANTOM'}
               </Text>
             )}
           </TouchableOpacity>
@@ -1917,34 +1987,7 @@ export const UserScreen = () => {
               </Text>
             </TouchableOpacity>
             
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#FC9965',
-                borderRadius: 12,
-                padding: 16,
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: theme.border,
-              }}
-              onPress={() => {
-                if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
-                  Alert.alert('Error', 'Please enter a valid amount');
-                  return;
-                }
-                handleSolflareTransfer(addFundsAmount);
-                setShowAddFundsModal(false);
-                setAddFundsAmount('');
-              }}
-            >
-              <Text style={{
-                color: '#fff',
-                fontSize: 14,
-                fontFamily: 'PressStart2P-Regular',
-                fontWeight: 'bold',
-              }}>
-                SOLFLARE WALLET
-              </Text>
-            </TouchableOpacity>
+
           </View>
         </View>
       </Modal>
