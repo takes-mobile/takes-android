@@ -3,12 +3,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LoginWithOAuthInput, useLoginWithOAuth } from "@privy-io/expo";
 import { useLogin } from "@privy-io/expo/ui";
 import { useLoginWithPasskey } from "@privy-io/expo/passkey";
+import { useRouter } from 'expo-router';
 
 import { useState, useContext, useEffect, useRef } from "react";
 
 import { ThemeContext } from '../app/_layout';
 import { LinearGradient } from 'expo-linear-gradient';
 import RetroButton from './RetroButton';
+import { WalletConnectButton } from './WalletConnectButton';
+import { useWalletConnection } from '../hooks/useWalletConnection';
 
 // Simple Glow Button component
 const PulsatingGlowButton = ({ 
@@ -355,6 +358,7 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const { theme: themeName, toggleTheme } = useContext(ThemeContext);
+  const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
@@ -401,6 +405,25 @@ export default function LoginScreen() {
       setError(JSON.stringify(err.message));
     },
   });
+
+  // Wallet connection hook
+  const {
+    connected: walletConnected,
+    connecting: walletConnecting,
+    address: walletAddress,
+    connectWallet,
+    disconnectWallet,
+  } = useWalletConnection();
+
+  // Redirect to wallet status page when wallet is connected
+  useEffect(() => {
+    if (walletConnected && walletAddress) {
+      // Add a small delay to show the connection success, then redirect
+      setTimeout(() => {
+        router.push('/wallet-status');
+      }, 1500);
+    }
+  }, [walletConnected, walletAddress, router]);
 
   useEffect(() => {
     Animated.parallel([
@@ -548,7 +571,7 @@ export default function LoginScreen() {
             />
           </View>
         
-                              <View style={{ alignItems: 'center', marginTop: 10 }}>
+          <View style={{ alignItems: 'center', marginTop: 10 }}>
             <Text style={{ 
                 fontSize: 14, 
                 color: 'rgba(255,255,255,0.5)', 
@@ -581,6 +604,20 @@ export default function LoginScreen() {
           backgroundColor="#4ed620"
           glowColor="#4ed620"
         />
+
+        {/* Wallet Connect Button */}
+        <View style={{ marginTop: 20, width: '100%', paddingHorizontal: 20 }}>
+          <WalletConnectButton
+            connected={walletConnected}
+            connecting={walletConnecting}
+            onConnect={connectWallet}
+            onDisconnect={disconnectWallet}
+            address={walletAddress}
+            variant="outline"
+            size="medium"
+            showAddress={true}
+          />
+        </View>
 
         {/* Error Message */}
         {error && (
