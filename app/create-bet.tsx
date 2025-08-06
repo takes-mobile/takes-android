@@ -5,6 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { ThemeContext } from './_layout';
 import RetroButton from '../components/RetroButton';
 import { useBets } from '../context/BetsContext';
+import { RetroPopup } from '../components/RetroPopup';
 
 const BET_GREEN = '#29d620';
 
@@ -23,6 +24,22 @@ export default function CreateBetScreen() {
   const router = useRouter();
   const { theme: themeName } = useContext(ThemeContext);
   const { fetchBets, lastFetched } = useBets();
+  
+  // RetroPopup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    data: null as any,
+    onConfirm: null as (() => void) | null
+  });
+
+  // Helper function to show popups
+  const showPopup = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', data?: any, onConfirm?: (() => void) | null) => {
+    setPopupConfig({ title, message, type, data, onConfirm: onConfirm || null });
+    setPopupVisible(true);
+  };
   
   // Prefetch bets in the background if needed
   useEffect(() => {
@@ -169,14 +186,14 @@ export default function CreateBetScreen() {
 
   const handleShowBet = () => {
     if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a bet description');
+      showPopup('Error', 'Please enter a bet description', 'error');
       return;
     }
 
     const validAnswers = answers.every(ans => ans.trim().length > 0);
 
     if (!validAnswers) {
-      Alert.alert('Error', 'Please fill in all answers');
+      showPopup('Error', 'Please fill in all answers', 'error');
       return;
     }
 
@@ -660,6 +677,17 @@ export default function CreateBetScreen() {
 
         </View>
       </Modal>
+      
+      {/* RetroPopup Component */}
+      <RetroPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        type={popupConfig.type}
+        data={popupConfig.data}
+        onConfirm={popupConfig.onConfirm}
+        onClose={() => setPopupVisible(false)}
+      />
     </ScrollView>
   );
 } 

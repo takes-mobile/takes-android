@@ -6,6 +6,7 @@ import { useBets, Bet } from '../context/BetsContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DonutChart from '../components/DonutChart';
+import { RetroPopup } from '../components/RetroPopup';
 
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
@@ -22,6 +23,22 @@ export default function LiveBetsScreen() {
   const router = useRouter();
   const { bets, loading, refreshing, fetchBets, setRefreshing } = useBets();
   const flatListRef = useRef<FlatList>(null);
+  
+  // RetroPopup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    data: null as any,
+    onConfirm: null as (() => void) | null
+  });
+
+  // Helper function to show popups
+  const showPopup = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', data?: any, onConfirm?: (() => void) | null) => {
+    setPopupConfig({ title, message, type, data, onConfirm: onConfirm || null });
+    setPopupVisible(true);
+  };
 
   // Theme configuration based on current theme
   const getTheme = () => {
@@ -237,7 +254,7 @@ export default function LiveBetsScreen() {
   // Fixed placeBet function with proper error handling and amount calculations
 const placeBet = async () => {
   if (selectedOption === null || !wallets || wallets.length === 0) {
-    Alert.alert('Error', 'Please select an option and ensure your wallet is connected');
+    showPopup('Error', 'Please select an option and ensure your wallet is connected', 'error');
     return;
   }
 
@@ -245,7 +262,7 @@ const placeBet = async () => {
   const userWallet = wallet.address;
 
   if (!userWallet) {
-    Alert.alert('Error', 'Unable to get wallet address.');
+    showPopup('Error', 'Unable to get wallet address.', 'error');
     return;
   }
 
@@ -256,7 +273,7 @@ const placeBet = async () => {
     
     // Validate amount
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      showPopup('Error', 'Please enter a valid amount', 'error');
       return;
     }
 
@@ -335,18 +352,15 @@ const placeBet = async () => {
         }
       }
 
-      Alert.alert(
+      showPopup(
         'Success! 🎉',
-        `Your BONK bet has been placed successfully!\n\nAmount: ${amount} BONK\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowBetModal(false);
-              setSelectedOption(null);
-            }
-          }
-        ]
+        `Your BONK bet has been placed successfully!`,
+        'success',
+        { signature, amount: `${amount} BONK`, option: bet.options[selectedOption] },
+        () => {
+          setShowBetModal(false);
+          setSelectedOption(null);
+        }
       );
       return;
     }
@@ -424,18 +438,15 @@ const placeBet = async () => {
       }
     }
 
-    Alert.alert(
+    showPopup(
       'Success! 🎉',
-      `Your bet has been placed successfully!\n\nAmount: ${amount} SOL\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setShowBetModal(false);
-            setSelectedOption(null);
-          }
-        }
-      ]
+      `Your bet has been placed successfully!`,
+      'success',
+      { signature, amount: `${amount} SOL`, option: bet.options[selectedOption] },
+      () => {
+        setShowBetModal(false);
+        setSelectedOption(null);
+      }
     );
 
   } catch (error) {
@@ -456,9 +467,10 @@ const placeBet = async () => {
       }
     }
     
-    Alert.alert(
+    showPopup(
       'Transaction Failed',
-      `Failed to place bet: ${errorMessage}\n\nPlease try again with a smaller amount or check your wallet balance.`
+      `Failed to place bet: ${errorMessage}\n\nPlease try again with a smaller amount or check your wallet balance.`,
+      'error'
     );
   } finally {
     setIsPlacingBet(false);
@@ -650,7 +662,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   setShowBetModal(true);
                 } else if (isExpired || !bet.isActive) {
-                  Alert.alert('Bet Unavailable', 'This bet has ended or is no longer active.');
+                  showPopup('Bet Unavailable', 'This bet has ended or is no longer active.', 'warning');
                 }
               }}
               style={{
@@ -698,7 +710,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   setShowBetModal(true);
                 } else if (isExpired || !bet.isActive) {
-                  Alert.alert('Bet Unavailable', 'This bet has ended or is no longer active.');
+                  showPopup('Bet Unavailable', 'This bet has ended or is no longer active.', 'warning');
                 }
               }}
               style={{
@@ -1059,6 +1071,17 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
           }
         />
       )}
+      
+      {/* RetroPopup Component */}
+      <RetroPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        type={popupConfig.type}
+        data={popupConfig.data}
+        onConfirm={popupConfig.onConfirm}
+        onClose={() => setPopupVisible(false)}
+      />
     </View>
   );
 }

@@ -24,6 +24,7 @@ import QRCode from 'react-native-qrcode-styled';
 import { BN } from '@project-serum/anchor';
 import { ThemeContext } from '../app/_layout';
 import RetroButton from './RetroButton';
+import { RetroPopup } from './RetroPopup';
 
 const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
   if (x.type === "phone") {
@@ -371,6 +372,16 @@ export const UserScreen = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
+  
+  // RetroPopup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    data: null as any,
+    onConfirm: null as (() => void) | null
+  });
   const { theme: themeName, toggleTheme } = useContext(ThemeContext);
   const { fetchBets, lastFetched } = useBets();
   const lightTheme = {
@@ -400,6 +411,12 @@ export const UserScreen = () => {
     placeholder: '#8778b3', // Medium-light purple placeholder
   };
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
+
+  // Helper function to show popups
+  const showPopup = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', data?: any, onConfirm?: (() => void) | null) => {
+    setPopupConfig({ title, message, type, data, onConfirm: onConfirm || null });
+    setPopupVisible(true);
+  };
 
   // Add a helper function to refresh balance
   const fetchBalance = useCallback(async () => {
@@ -530,7 +547,7 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
     if (params.get("errorCode")) {
       const errorMessage = params.get("errorMessage") || "Unknown error occurred";
       console.log("Phantom error:", errorMessage);
-      Alert.alert("Wallet Error", errorMessage);
+      showPopup("Wallet Error", errorMessage, 'error');
       setConnectingToPhantom(false);
       return;
     }
@@ -574,22 +591,24 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
           setPhantomWalletPublicKey(new PublicKey(connectData.public_key));
           setConnectingToPhantom(false);
           
-          Alert.alert(
+          showPopup(
             "Phantom Connected! 🎉",
             `Successfully connected to ${connectData.public_key.slice(0, 8)}...`,
-            [{ text: "OK" }]
+            'success',
+            { publicKey: connectData.public_key }
           );
         } catch (decryptError) {
           console.error("Error decrypting connection data:", decryptError);
-          Alert.alert(
+          showPopup(
             "Connection Error", 
-            "Failed to decrypt Phantom response. Please try connecting again."
+            "Failed to decrypt Phantom response. Please try connecting again.",
+            'error'
           );
           setConnectingToPhantom(false);
         }
       } else {
         console.log("Missing required connection parameters");
-        Alert.alert("Connection Error", "Invalid response from Phantom wallet");
+        showPopup("Connection Error", "Invalid response from Phantom wallet", 'error');
         setConnectingToPhantom(false);
       }
     }
@@ -600,7 +619,7 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
       setPhantomWalletPublicKey(null);
       setSession(undefined);
       setSharedSecret(undefined);
-      Alert.alert("Phantom Disconnected", "Your Phantom wallet has been disconnected.");
+      showPopup("Phantom Disconnected", "Your Phantom wallet has been disconnected.", 'info');
     }
 
     // Handle transaction response
@@ -611,18 +630,14 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
       
       if (signature) {
         console.log("Transaction signature:", signature);
-        Alert.alert(
+        showPopup(
           "Transaction Successful! 🎉",
           `Transaction completed with signature: ${signature.slice(0, 8)}...`,
-          [
-            {
-              text: "View on Explorer",
-              onPress: () => {
-                Linking.openURL(`https://solscan.io/tx/${signature}`);
-              }
-            },
-            { text: "OK" }
-          ]
+          'success',
+          { signature },
+          () => {
+            Linking.openURL(`https://solscan.io/tx/${signature}`);
+          }
         );
         
         // Refresh balance after successful transaction
@@ -632,7 +647,7 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
           }
         }, 2000);
       } else {
-        Alert.alert("Transaction Error", "No transaction signature received");
+        showPopup("Transaction Error", "No transaction signature received", 'error');
       }
     }
 
@@ -697,11 +712,11 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
           
         } catch (decryptError) {
           console.error("Error processing signed transaction:", decryptError);
-          Alert.alert("Transaction Error", "Failed to process signed transaction");
+          showPopup("Transaction Error", "Failed to process signed transaction", 'error');
         }
       } else {
         console.log("Missing required sign transaction parameters");
-        Alert.alert("Transaction Error", "Invalid response from Phantom wallet");
+        showPopup("Transaction Error", "Invalid response from Phantom wallet", 'error');
       }
     }
 
@@ -710,7 +725,7 @@ const handleDeepLink = useCallback(async ({ url }: { url: string }) => {
   } catch (error) {
     console.error("Error processing deep link:", error);
     setConnectingToPhantom(false);
-    Alert.alert("Deeplink Error", "Failed to process wallet response");
+          showPopup("Deeplink Error", "Failed to process wallet response", 'error');
   }
 }, [dappKeyPair.secretKey, account?.address, fetchBalance, sharedSecret]);
 
@@ -745,7 +760,7 @@ const connectToPhantom = useCallback(async () => {
     await Linking.openURL(phantomUrl);
   } catch (error) {
     console.error("Error connecting to Phantom:", error);
-    Alert.alert("Connection Error",  error as string, "Failed to connect to Phantom wallet." as any);
+          showPopup("Connection Error", `Failed to connect to Phantom wallet: ${error}`, 'error');
     setConnectingToPhantom(false); 
   }
 }, [connectingToPhantom, dappKeyPair.publicKey, onConnectRedirectLink]);
@@ -948,7 +963,7 @@ useEffect(() => {
   // End Position function - sell ALL tokens back to SOL
   const handleEndPosition = async (bet: any, participation: any) => {
     if (!wallets || wallets.length === 0) {
-      Alert.alert('Error', 'No wallet found. Please connect your wallet first.');
+      showPopup('Error', 'No wallet found. Please connect your wallet first.', 'error');
       return;
     }
 
@@ -956,7 +971,7 @@ useEffect(() => {
     const userWallet = wallet.address;
 
     if (!userWallet) {
-      Alert.alert('Error', 'Unable to get wallet address.');
+      showPopup('Error', 'Unable to get wallet address.', 'error');
       return;
     }
 
@@ -1021,10 +1036,11 @@ useEffect(() => {
       console.log('Transaction successful:', signature);
       setUserWithdrawnPositions(prev => new Set([...prev, bet.id]));
 
-      Alert.alert(
+      showPopup(
         'Position Closed! 🎉',
-        `Successfully sold ${tokenBalance.toFixed(4)} tokens for SOL!\n\nTransaction: ${signature.slice(0, 8)}...`,
-        [{ text: 'OK' }]
+        `Successfully sold ${tokenBalance.toFixed(4)} tokens for SOL!`,
+        'success',
+        { signature, amount: `${tokenBalance.toFixed(4)} tokens` }
       );
 
       // Refresh user bets and trigger token balance recheck
@@ -1055,9 +1071,10 @@ useEffect(() => {
 
     } catch (error) {
       console.error('End position error:', error);
-      Alert.alert(
+      showPopup(
         'Error',
-        `Failed to end position: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to end position: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
       );
     } finally {
       setEndingPosition(null);
@@ -1067,7 +1084,7 @@ useEffect(() => {
 // Enhanced handlePhantomTransfer function for your UserScreen component
 const handlePhantomTransfer = useCallback(async (amount: string) => {
   if (!phantomWalletPublicKey || !account?.address || !sharedSecret || !session) {
-    Alert.alert("Error", "Phantom wallet not properly connected");
+    showPopup("Error", "Phantom wallet not properly connected", 'error');
     return;
   }
 
@@ -1076,7 +1093,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
     
     const amountLamports = Math.floor(Number(amount) * LAMPORTS_PER_SOL);
     if (isNaN(amountLamports) || amountLamports <= 0) {
-      Alert.alert("Error", "Invalid amount entered");
+      showPopup("Error", "Invalid amount entered", 'error');
       return;
     }
 
@@ -1126,7 +1143,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
     
   } catch (error) {
     console.error("Error creating Phantom transfer:", error);
-    Alert.alert("Transfer Error", `Failed to create transfer: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          showPopup("Transfer Error", `Failed to create transfer: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
   }
 }, [phantomWalletPublicKey, account?.address, sharedSecret, session, dappKeyPair.publicKey, onSignTransactionRedirectLink]);
 
@@ -1532,7 +1549,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             minHeight={48}
             minWidth={240}
             textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-            onPress={() => { setShowReceiveModal(false); Alert.alert('Buy Crypto', 'Buy crypto with card functionality coming soon!'); }}
+            onPress={() => { setShowReceiveModal(false); showPopup('Buy Crypto', 'Buy crypto with card functionality coming soon!', 'info'); }}
           />
         </View>
       </Modal>
@@ -1877,11 +1894,11 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           </View>
         ) : (
           <>
-    {activeTab === 'live' ? (
-  // Live bets (only active bets that haven't ended AND haven't been withdrawn)
+{activeTab === 'live' ? (
+  // Live bets (active bets that haven't ended OR timeless bets, AND haven't been withdrawn)
   userBets.filter(bet => 
     bet.isActive && 
-    new Date(bet.endTime) > new Date() && 
+    (bet.betType === 'timeless' || new Date(bet.endTime) > new Date()) && 
     !userWithdrawnPositions.has(bet.id)
   ).length === 0 ? (
     <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
@@ -1898,7 +1915,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
     userBets
       .filter(bet => 
         bet.isActive && 
-        new Date(bet.endTime) > new Date() && 
+        (bet.betType === 'timeless' || new Date(bet.endTime) > new Date()) && 
         !userWithdrawnPositions.has(bet.id)
       )
       .map((bet: any, index: number) => (
@@ -1916,10 +1933,10 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
       ))
   )
 ) : (
-  // Previous bets (ended, inactive, OR withdrawn)
+  // Previous bets (ended, inactive, OR withdrawn - but exclude active timeless bets)
   userBets.filter(bet => 
     !bet.isActive || 
-    new Date(bet.endTime) <= new Date() || 
+    (bet.betType !== 'timeless' && new Date(bet.endTime) <= new Date()) || 
     userWithdrawnPositions.has(bet.id)
   ).length === 0 ? (
     <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
@@ -1936,7 +1953,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
     userBets
       .filter(bet => 
         !bet.isActive || 
-        new Date(bet.endTime) <= new Date() || 
+        (bet.betType !== 'timeless' && new Date(bet.endTime) <= new Date()) || 
         userWithdrawnPositions.has(bet.id)
       )
       .map((bet: any, index: number) => (
@@ -2136,7 +2153,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           if (phantomWalletPublicKey) {
             // If connected, proceed with transfer
             if (!addFundsAmount || parseFloat(addFundsAmount) <= 0) {
-              Alert.alert('Error', 'Please enter a valid amount');
+              showPopup('Error', 'Please enter a valid amount', 'error');
               return;
             }
             handlePhantomTransfer(addFundsAmount);
@@ -2419,7 +2436,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           // Fixed withdrawal function with better error handling
 onPress={async () => {
   if (!withdrawAddress || !withdrawAmount) {
-    Alert.alert('Error', 'Please enter address and amount');
+          showPopup('Error', 'Please enter address and amount', 'error');
     return;
   }
   
@@ -2428,14 +2445,14 @@ onPress={async () => {
   try {
     pubkey = new PublicKey(withdrawAddress);
   } catch {
-    Alert.alert('Error', 'Invalid Solana address');
+          showPopup('Error', 'Invalid Solana address', 'error');
     return;
   }
   
   // Validate amount
   const amount = parseFloat(withdrawAmount);
   if (isNaN(amount) || amount <= 0) {
-    Alert.alert('Error', 'Invalid amount');
+          showPopup('Error', 'Invalid amount', 'error');
     return;
   }
   
@@ -2445,17 +2462,17 @@ onPress={async () => {
     parseFloat(bonkBalance || '0');
   
   if (amount > currentBalance) {
-    Alert.alert('Error', `Insufficient ${withdrawToken} balance`);
+          showPopup('Error', `Insufficient ${withdrawToken} balance`, 'error');
     return;
   }
   
   if (!wallets?.[0]) {
-    Alert.alert('Error', 'No wallet found. Please ensure your wallet is connected.');
+          showPopup('Error', 'No wallet found. Please ensure your wallet is connected.', 'error');
     return;
   }
   
   if (!account?.address) {
-    Alert.alert('Error', 'Wallet address not available. Please try refreshing.');
+          showPopup('Error', 'Wallet address not available. Please try refreshing.', 'error');
     return;
   }
   
@@ -2466,7 +2483,7 @@ onPress={async () => {
     const estimatedFee = 0.000005; // ~5000 lamports for transaction fee
     
     if (withdrawToken === 'SOL' && currentBalanceNum < withdrawAmountNum + estimatedFee) {
-      Alert.alert('Error', `Insufficient balance. You need ${(withdrawAmountNum + estimatedFee).toFixed(6)} SOL (including fees)`);
+      showPopup('Error', `Insufficient balance. You need ${(withdrawAmountNum + estimatedFee).toFixed(6)} SOL (including fees)`, 'error');
       return;
     }
 
@@ -2604,31 +2621,23 @@ onPress={async () => {
     
     console.log('Transaction sent successfully:', signature);
     
-    Alert.alert(
+    showPopup(
       'Withdrawal Successful! 🎉',
-      `Successfully sent ${withdrawAmount} ${withdrawToken}!\n\nTransaction: ${signature.slice(0, 8)}...`,
-      [
-        {
-          text: 'View on Solscan',
-          onPress: () => {
-            Linking.openURL(`https://solscan.io/tx/${signature}`);
+      `Successfully sent ${withdrawAmount} ${withdrawToken}!`,
+      'success',
+      { signature, amount: `${withdrawAmount} ${withdrawToken}` },
+      () => {
+        Linking.openURL(`https://solscan.io/tx/${signature}`);
+        setShowWithdrawModal(false);
+        setWithdrawAddress('');
+        setWithdrawAmount('');
+        // Refresh balance after successful transaction
+        setTimeout(() => {
+          if (account?.address) {
+            fetchBalance();
           }
-        },
-        {
-          text: 'OK',
-          onPress: () => {
-            setShowWithdrawModal(false);
-            setWithdrawAddress('');
-            setWithdrawAmount('');
-            // Refresh balance after successful transaction
-            setTimeout(() => {
-              if (account?.address) {
-                fetchBalance();
-              }
-            }, 2000);
-          }
-        }
-      ]
+        }, 2000);
+      }
     );
     
   } catch (e) {
@@ -2637,17 +2646,17 @@ onPress={async () => {
     
     // Provide more specific error messages
     if (err.message?.includes('insufficient funds')) {
-      Alert.alert('Error', 'Insufficient balance for transaction');
+      showPopup('Error', 'Insufficient balance for transaction', 'error');
     } else if (err.message?.includes('Invalid blockhash')) {
-      Alert.alert('Error', 'Network error. Please try again.');
+      showPopup('Error', 'Network error. Please try again.', 'error');
     } else if (err.message?.includes('signature')) {
-      Alert.alert('Error', 'Transaction signing failed. Please try again.');
+      showPopup('Error', 'Transaction signing failed. Please try again.', 'error');
     } else if (err.message?.includes('non-JSON response')) {
-      Alert.alert('Error', 'Server error. The API might be down. Please try again later.');
+      showPopup('Error', 'Server error. The API might be down. Please try again later.', 'error');
     } else if (err.message?.includes('API request failed')) {
-      Alert.alert('Error', 'Server connection failed. Please check your internet connection and try again.');
+      showPopup('Error', 'Server connection failed. Please check your internet connection and try again.', 'error');
     } else {
-      Alert.alert('Error', `Transaction failed: ${err.message || 'Unknown error'}`);
+      showPopup('Error', `Transaction failed: ${err.message || 'Unknown error'}`, 'error');
     }
   }
 }}
@@ -2675,6 +2684,17 @@ onPress={async () => {
 
       {/* Remove tabs and live/previous bets sections */}
       {/* Bottom nav is already present globally */}
+      
+      {/* RetroPopup Component */}
+      <RetroPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        type={popupConfig.type}
+        data={popupConfig.data}
+        onConfirm={popupConfig.onConfirm}
+        onClose={() => setPopupVisible(false)}
+      />
       </ScrollView>
     </SafeAreaView>
   );

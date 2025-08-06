@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Connection, Transaction , Keypair} from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { RetroPopup } from '../components/RetroPopup';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -123,6 +124,22 @@ export default function PreviewBetScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const [isPublishing, setIsPublishing] = useState(false);
+  
+  // RetroPopup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    data: null as any,
+    onConfirm: null as (() => void) | null
+  });
+
+  // Helper function to show popups
+  const showPopup = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', data?: any, onConfirm?: (() => void) | null) => {
+    setPopupConfig({ title, message, type, data, onConfirm: onConfirm || null });
+    setPopupVisible(true);
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -211,7 +228,7 @@ export default function PreviewBetScreen() {
 
       // Check if wallet is available
       if (!wallets || wallets.length === 0) {
-        Alert.alert('Error', 'No wallet found. Please connect your wallet first.');
+        showPopup('Error', 'No wallet found. Please connect your wallet first.', 'error');
         return;
       }
 
@@ -222,7 +239,7 @@ export default function PreviewBetScreen() {
       const userWallet = wallet.address;
 
       if (!userWallet) {
-        Alert.alert('Error', 'Unable to get wallet address.');
+        showPopup('Error', 'Unable to get wallet address.', 'error');
         return;
       }
 
@@ -381,22 +398,20 @@ export default function PreviewBetScreen() {
         console.log('Bet added to database:', addData);
       }
 
-      Alert.alert(
+      showPopup(
         'Success! 🎉',
-        `Your bet has been published successfully!\n\nTokens created: ${tokenNames}\n\nTransactions: ${signatures.join(', ')}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
+        `Your bet has been published successfully!`,
+        'success',
+        { tokenNames, signatures },
+        () => router.back()
       );
 
     } catch (error) {
       console.error('Publish error:', error);
-      Alert.alert(
+      showPopup(
         'Error',
-        `Failed to publish bet: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to publish bet: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
       );
     } finally {
       setIsPublishing(false);
@@ -667,6 +682,17 @@ export default function PreviewBetScreen() {
           />
         </View>
       </View>
+      
+      {/* RetroPopup Component */}
+      <RetroPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        type={popupConfig.type}
+        data={popupConfig.data}
+        onConfirm={popupConfig.onConfirm}
+        onClose={() => setPopupVisible(false)}
+      />
     </Animated.View>
   </View>
   );

@@ -5,6 +5,7 @@ import { ThemeContext } from './_layout';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js';
+import { RetroPopup } from '../components/RetroPopup';
 
 interface BetDetails {
   id: string;
@@ -40,6 +41,22 @@ export default function BetDetailsScreen() {
   const [isPlacingBet, setIsPlacingBet] = useState(false);
   const [showBetModal, setShowBetModal] = useState(false);
   const [isDrawingWinner, setIsDrawingWinner] = useState(false);
+  
+  // RetroPopup state
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'warning' | 'info',
+    data: null as any,
+    onConfirm: null as (() => void) | null
+  });
+
+  // Helper function to show popups
+  const showPopup = (title: string, message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info', data?: any, onConfirm?: (() => void) | null) => {
+    setPopupConfig({ title, message, type, data, onConfirm: onConfirm || null });
+    setPopupVisible(true);
+  };
 
   const theme = {
     background: '#1e1a2c', // Dark purple background
@@ -124,7 +141,7 @@ export default function BetDetailsScreen() {
 
   const placeBet = async () => {
     if (!bet || selectedOption === null || !wallets || wallets.length === 0) {
-      Alert.alert('Error', 'Please select an option and ensure your wallet is connected');
+      showPopup('Error', 'Please select an option and ensure your wallet is connected', 'error');
       return;
     }
 
@@ -132,7 +149,7 @@ export default function BetDetailsScreen() {
     const userWallet = wallet.address;
 
     if (!userWallet) {
-      Alert.alert('Error', 'Unable to get wallet address');
+      showPopup('Error', 'Unable to get wallet address', 'error');
       return;
     }
 
@@ -204,26 +221,24 @@ export default function BetDetailsScreen() {
         }
       }
 
-      Alert.alert(
+      showPopup(
         'Success! 🎉',
-        `Your bet has been placed successfully!\n\nAmount: ${amount} SOL\nOption: ${bet.options[selectedOption]}\nTransaction: ${signature.slice(0, 8)}...`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowBetModal(false);
-              setSelectedOption(null);
-              setBetAmount('0.1');
-            }
-          }
-        ]
+        `Your bet has been placed successfully!`,
+        'success',
+        { signature, amount: `${amount} SOL`, option: bet.options[selectedOption] },
+        () => {
+          setShowBetModal(false);
+          setSelectedOption(null);
+          setBetAmount('0.1');
+        }
       );
 
     } catch (error) {
       console.error('Place bet error:', error);
-      Alert.alert(
+      showPopup(
         'Error',
-        `Failed to place bet: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to place bet: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
       );
     } finally {
       setIsPlacingBet(false);
@@ -237,20 +252,20 @@ export default function BetDetailsScreen() {
     
     if (!isExpired) {
       const timeLeft = formatTimeLeft(bet.endTime);
-      Alert.alert(
+      showPopup(
         'Bet Still Active',
         `${timeLeft} left for deciding who won. Winner can only be drawn after the betting period ends.`,
-        [{ text: 'OK' }]
+        'warning'
       );
       return;
     }
 
     // Check if winner is already drawn
     if (bet.winner !== null) {
-      Alert.alert(
+      showPopup(
         'Winner Already Drawn',
         `This bet has already been resolved. Winner: ${typeof bet.winner === 'number' && bet.options[bet.winner] ? bet.options[bet.winner] : 'Unknown'}`,
-        [{ text: 'OK' }]
+        'info'
       );
       return;
     }
@@ -282,10 +297,11 @@ export default function BetDetailsScreen() {
           setBet(data.bet);
         }
 
-        Alert.alert(
+        showPopup(
           'Winner Drawn! 🎉',
-          `The winner has been determined!\n\nWinning Option: ${data.winningOption || 'Unknown'}\n\nWinners have to sell their tokens to the pool to withdraw in sol.`,
-          [{ text: 'OK' }]
+          `The winner has been determined!`,
+          'success',
+          { winningOption: data.winningOption || 'Unknown' }
         );
       } else {
         throw new Error(data.message || 'Failed to draw winner');
@@ -293,9 +309,10 @@ export default function BetDetailsScreen() {
 
     } catch (error) {
       console.error('Draw winner error:', error);
-      Alert.alert(
+      showPopup(
         'Error',
-        `Failed to draw winner: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to draw winner: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
       );
     } finally {
       setIsDrawingWinner(false);
@@ -713,6 +730,17 @@ export default function BetDetailsScreen() {
           </View>
         </View>
       </Modal>
+      
+      {/* RetroPopup Component */}
+      <RetroPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        type={popupConfig.type}
+        data={popupConfig.data}
+        onConfirm={popupConfig.onConfirm}
+        onClose={() => setPopupVisible(false)}
+      />
     </ScrollView>
   );
 } 
