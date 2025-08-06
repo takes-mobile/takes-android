@@ -96,10 +96,14 @@ const buildUrl = (path: any, params: { toString: () => any; }) =>
   `https://phantom.app/ul/v1/${path}?${params.toString()}`;
 
 // BetCard component for user's bets
-const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: { 
+// Replace the BetCard component with this fixed version:
+// Replace the BetCard component with this fixed version:
+
+const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition, onPositionWithdrawn }: { 
   bet: any; 
   userWallet: string | undefined; 
   theme: any;
+  onPositionWithdrawn?: (betId: string) => void;
   onEndPosition: (bet: any, participation: any) => void;
   endingPosition: string | null;
 }) => {
@@ -107,6 +111,21 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
   const [hasTokens, setHasTokens] = useState<boolean | null>(null);
   const [checkingTokens, setCheckingTokens] = useState(false);
   
+  // Move this logic to useEffect to prevent setState during render
+  // Use useRef to track if we've already called onPositionWithdrawn
+  const hasCalledWithdrawn = useRef(false);
+  
+  useEffect(() => {
+    if (hasTokens === false && onPositionWithdrawn && !hasCalledWithdrawn.current) {
+      hasCalledWithdrawn.current = true;
+      onPositionWithdrawn(bet.id);
+    }
+    // Reset the ref when hasTokens becomes true or null
+    if (hasTokens !== false) {
+      hasCalledWithdrawn.current = false;
+    }
+  }, [hasTokens, onPositionWithdrawn, bet.id]);
+
   const formatTimeLeft = (endTime: string) => {
     const end = new Date(endTime);
     const now = new Date();
@@ -129,7 +148,7 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
   const isEnding = endingPosition === bet.id;
 
   // Check if user has tokens for this bet using Jupiter Ultra API
-  const checkTokenBalance = async () => {
+  const checkTokenBalance = useCallback(async () => {
     if (!userWallet || !userParticipation) return;
     
     setCheckingTokens(true);
@@ -156,11 +175,11 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
     } finally {
       setCheckingTokens(false);
     }
-  };
+  }, [userWallet, bet.tokenAddresses, userParticipation]);
 
   useEffect(() => {
     checkTokenBalance();
-  }, [userWallet, bet.id]);
+  }, [checkTokenBalance]);
 
   return (
     <View style={{
@@ -177,7 +196,6 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
       shadowOffset: { width: 0, height: 2 },
       elevation: 3,
     }}>
-
 
       {/* Generated Image Display */}
       {bet.generatedImage && (
@@ -230,75 +248,11 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
         </Text>
       </View>
 
-      {/* Status and stats */}
-      <View style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {/* <View style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: bet.isActive && !isExpired ? theme.green : '#ef4444',
-            marginRight: 6,
-          }} /> */}
-          {/* <Text style={{
-            fontSize: 12,
-            fontFamily: 'PressStart2P-Regular',
-            color: bet.isActive && !isExpired ? theme.green : '#ef4444',
-            fontWeight: '600',
-          }}>
-            {bet.isActive && !isExpired ? 'Active' : 'Ended'}
-          </Text> */}
-        </View>
-        
-
-        
-        {/* <Text style={{
-          fontSize: 12,
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.subtext,
-        }}>
-          {bet.betType === 'timeless' ? 'TIMELESS' : formatTimeLeft(bet.endTime || '')}
-        </Text> */}
-      </View>
-
       {/* Action buttons */}
       <View style={{
         flexDirection: 'row',
         gap: 8,
       }}>
-        {/* <TouchableOpacity
-          style={{
-            flex: 1,
-            backgroundColor: theme.primary || '#3B82F6',
-            borderRadius: 8,
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            alignItems: 'center',
-            opacity: isEnding ? 0.7 : 1,
-          }}
-          onPress={() => {
-            router.push({
-              pathname: '/bet-details',
-              params: { betData: JSON.stringify(bet) }
-            });
-          }}
-          disabled={isEnding}
-        >
-          <Text style={{
-            color: '#fff',
-            fontSize: 12,
-            fontFamily: 'PressStart2P-Regular',
-            fontWeight: '600',
-          }}>
-            View Details
-          </Text>
-        </TouchableOpacity> */}
-
         {/* Show End Position button only if user has tokens */}
         {hasTokens === true && (
           <TouchableOpacity
@@ -395,7 +349,7 @@ export const UserScreen = () => {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [sendSuccess, setSendSuccess] = useState('');
-  
+  const [userWithdrawnPositions, setUserWithdrawnPositions] = useState<Set<string>>(new Set());
   // Phantom connection state
   const [dappKeyPair] = useState(nacl.box.keyPair());
   const [sharedSecret, setSharedSecret] = useState<Uint8Array>();
@@ -1065,6 +1019,7 @@ useEffect(() => {
       });
 
       console.log('Transaction successful:', signature);
+      setUserWithdrawnPositions(prev => new Set([...prev, bet.id]));
 
       Alert.alert(
         'Position Closed! 🎉',
@@ -1922,59 +1877,83 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           </View>
         ) : (
           <>
-            {activeTab === 'live' ? (
-              // Live bets (only active bets that haven't ended)
-              userBets.filter(bet => bet.isActive && new Date(bet.endTime) > new Date()).length === 0 ? (
-                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
-                  <Text style={{ 
-                    color: theme.subtext, 
-                    fontSize: 12,
-                    fontFamily: 'PressStart2P-Regular',
-                  }}>
-                    NO LIVE BETS YET.
-                  </Text>
-                </View>
-              ) : (
-                userBets
-                  .filter(bet => bet.isActive && new Date(bet.endTime) > new Date())
-                  .map((bet, index) => (
-                    <BetCard 
-                      key={bet.id} 
-                      bet={bet} 
-                      userWallet={account?.address} 
-                      theme={theme}
-                      onEndPosition={handleEndPosition}
-                      endingPosition={endingPosition}
-                    />
-                  ))
-              )
-            ) : (
-              // Previous bets (ended, inactive, or withdrawn)
-              userBets.filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date()).length === 0 ? (
-                <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
-                  <Text style={{ 
-                    color: theme.subtext, 
-                    fontSize: 12,
-                    fontFamily: 'PressStart2P-Regular',
-                  }}>
-                    NO PREVIOUS BETS YET.
-                  </Text>
-                </View>
-              ) : (
-                userBets
-                  .filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date())
-                  .map((bet, index) => (
-                    <BetCard 
-                      key={bet.id} 
-                      bet={bet} 
-                      userWallet={account?.address} 
-                      theme={theme}
-                      onEndPosition={handleEndPosition}
-                      endingPosition={endingPosition}
-                    />
-                  ))
-              )
-            )}
+    {activeTab === 'live' ? (
+  // Live bets (only active bets that haven't ended AND haven't been withdrawn)
+  userBets.filter(bet => 
+    bet.isActive && 
+    new Date(bet.endTime) > new Date() && 
+    !userWithdrawnPositions.has(bet.id)
+  ).length === 0 ? (
+    <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
+      <Text style={{ 
+        color: theme.subtext, 
+        fontSize: 12,
+        fontFamily: 'PressStart2P-Regular',
+        marginTop: 8 
+      }}>
+        NO ACTIVE BETS
+      </Text>
+    </View>
+  ) : (
+    userBets
+      .filter(bet => 
+        bet.isActive && 
+        new Date(bet.endTime) > new Date() && 
+        !userWithdrawnPositions.has(bet.id)
+      )
+      .map((bet: any, index: number) => (
+        <BetCard 
+          key={bet.id} 
+          bet={bet} 
+          userWallet={account?.address} 
+          theme={theme}
+          onEndPosition={handleEndPosition}
+          endingPosition={endingPosition}
+          onPositionWithdrawn={(betId) => {
+            setUserWithdrawnPositions(prev => new Set([...prev, betId]));
+          }}
+        />
+      ))
+  )
+) : (
+  // Previous bets (ended, inactive, OR withdrawn)
+  userBets.filter(bet => 
+    !bet.isActive || 
+    new Date(bet.endTime) <= new Date() || 
+    userWithdrawnPositions.has(bet.id)
+  ).length === 0 ? (
+    <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
+      <Text style={{ 
+        color: theme.subtext, 
+        fontSize: 12,
+        fontFamily: 'PressStart2P-Regular',
+        marginTop: 8 
+      }}>
+        NO PREVIOUS BETS
+      </Text>
+    </View>
+  ) : (
+    userBets
+      .filter(bet => 
+        !bet.isActive || 
+        new Date(bet.endTime) <= new Date() || 
+        userWithdrawnPositions.has(bet.id)
+      )
+      .map((bet: any, index: number) => (
+        <BetCard 
+          key={bet.id} 
+          bet={bet} 
+          userWallet={account?.address} 
+          theme={theme}
+          onEndPosition={handleEndPosition}
+          endingPosition={endingPosition}
+          onPositionWithdrawn={(betId) => {
+            setUserWithdrawnPositions(prev => new Set([...prev, betId]));
+          }}
+        />
+      ))
+  )
+)}
           </>
         )}
       </View>
