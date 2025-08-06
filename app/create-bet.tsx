@@ -13,10 +13,12 @@ export default function CreateBetScreen() {
   const [answers, setAnswers] = useState(['', '']);
   const [generatedImage, setGeneratedImage] = useState('');
   const [betDuration, setBetDuration] = useState('24');
-  const [betAmount, setBetAmount] = useState('0.1');
+  // Remove betAmount state and related logic
+  // const [betAmount, setBetAmount] = useState('0.1');
   const [betType, setBetType] = useState<'standard' | 'bonk' | 'timeless'>('standard');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showRewards, setShowRewards] = useState(false);
+  const [showCreatorRewards, setShowCreatorRewards] = useState(false);
   const [iconScale] = useState(new Animated.Value(1));
   const router = useRouter();
   const { theme: themeName } = useContext(ThemeContext);
@@ -69,42 +71,44 @@ export default function CreateBetScreen() {
     { label: '30d', hours: 720, color: theme.warning, description: 'Monthly Bet' },
   ];
 
-  const amountOptions = [
-    { amount: 0.05, color: theme.success, label: 'Starter' },
-    { amount: 0.1, color: theme.green, label: 'Popular' },
-    { amount: 0.5, color: theme.accent, label: 'Premium' },
-  ];
+  // Remove amountOptions and all related logic
+  // const amountOptions = [
+  //   { amount: 0.05, color: theme.success, label: 'Starter' },
+  //   { amount: 0.1, color: theme.green, label: 'Popular' },
+  //   { amount: 0.5, color: theme.accent, label: 'Premium' },
+  // ];
 
   const betTypeOptions = [
     { 
       type: 'standard' as const, 
-      label: 'STANDARD', 
-      description: 'Regular SOL betting',
+      label: 'NORMAL', 
+      description: '',
       color: theme.green,
-      icon: '🎯'
+      icon: ''
     },
     { 
       type: 'bonk' as const, 
       label: 'BONK BUY', 
-      description: 'Bet with BONK tokens',
+      description: '',
       color: theme.orange,
-      icon: '🪙'
+      icon: require('../assets/images/bonk.png')
     },
     { 
       type: 'timeless' as const, 
       label: 'TIMELESS', 
-      description: 'No deadline, always active',
+      description: '',
       color: theme.accent,
       icon: '♾️'
     },
   ];
 
-  // Calculate potential earnings
+  // Calculate potential earnings (remove betAmount dependency)
   const calculatePotentialEarnings = () => {
-    const baseAmount = parseFloat(betAmount) || 0.1;
+    // const baseAmount = parseFloat(betAmount) || 0.1;
     const estimatedParticipants = 25; // Based on similar questions
     const creatorCut = 0.05; // 5% of total pot
-    return (baseAmount * estimatedParticipants * creatorCut).toFixed(2);
+    // return (baseAmount * estimatedParticipants * creatorCut).toFixed(2);
+    return (estimatedParticipants * creatorCut).toFixed(2);
   };
 
   const animateIconPress = () => {
@@ -139,7 +143,13 @@ export default function CreateBetScreen() {
     }
 
     try {
-      const prompt = `${description} ${answers[0]} vs ${answers[1]}`;
+      let prompt = `${description} ${answers[0]} vs ${answers[1]}`;
+      // Use bonk.img for bonk buy type
+      if (betType === 'bonk') {
+        // Use a bonk image instead of pollinations
+        setGeneratedImage('https://bonkimg.com/bonk.png');
+        return;
+      }
       const encodedPrompt = encodeURIComponent(prompt);
       const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
       setGeneratedImage(imageUrl);
@@ -148,14 +158,14 @@ export default function CreateBetScreen() {
     }
   };
 
-  // Generate image when description or answers change
+  // Generate image when description or answers or betType change
   useEffect(() => {
     const timer = setTimeout(() => {
       generateImage();
     }, 1000); // Debounce for 1 second
 
     return () => clearTimeout(timer);
-  }, [description, answers]);
+  }, [description, answers, betType]);
 
   const handleShowBet = () => {
     if (!description.trim()) {
@@ -173,7 +183,7 @@ export default function CreateBetScreen() {
     const betData = {
       description,
       duration: betType === 'timeless' ? null : parseInt(betDuration),
-      amount: parseFloat(betAmount),
+      // amount: parseFloat(betAmount),
       answers: answers.map(answer => ({
         type: 'text',
         content: answer
@@ -187,7 +197,7 @@ export default function CreateBetScreen() {
       params: { 
         description, 
         duration: betType === 'timeless' ? '0' : betDuration,
-        amount: betAmount,
+        // amount: betAmount,
         answers: JSON.stringify(betData.answers),
         generatedImage,
         betType
@@ -197,144 +207,46 @@ export default function CreateBetScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
-      {/* Header with Creation Incentives */}
-      <View style={{ marginBottom: 20, marginTop: 20 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <View style={{ position: 'relative' }}>
-            {/* Retro pixel art title */}
-            <View>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontFamily: 'PressStart2P-Regular',
-                  color: theme.green,
-                  zIndex: 1,
-                  textShadowColor: 'rgba(0,0,0,0.7)',
-                  textShadowOffset: { width: 2, height: 2 },
-                  textShadowRadius: 0,
-                  textTransform: 'uppercase',
-                  textAlign: 'left',
-                }}
-              >
-                WHAT'S ur
-              </Text>
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontFamily: 'PressStart2P-Regular',
-                  color: theme.green,
-                  zIndex: 1,
-                  textShadowColor: 'rgba(0,0,0,0.7)',
-                  textShadowOffset: { width: 2, height: 2 },
-                  textShadowRadius: 0,
-                  textTransform: 'uppercase',
-                  paddingTop: 10,
-                  textAlign: 'left',
-                }}
-              >
-                viral TAKE?
-              </Text>
-            </View>
-          </View>
-          {/* Notification Icon - Retro Style */}
-          <TouchableOpacity
-            onPress={handleRewardsPress}
-            style={{
-              backgroundColor: '#FFD600',
-              borderWidth: 2,
-              borderColor: '#b8860b',
-              borderRadius: 8,
-              paddingVertical: 2,
-              paddingHorizontal: 2,
-              flexDirection: 'row',
-              alignItems: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.3,
-              shadowRadius: 2,
-              elevation: 3,
-            }}
-          >
-            <Animated.View style={{ 
-              transform: [{ scale: iconScale }],
-              marginRight: 2,
-              marginTop: 2,
-              marginBottom: 2,
-              marginLeft: 2,
-              paddingLeft: 4
-            }}>
-              <MaterialIcons name="emoji-events" size={16} color="#b8860b" />
-            </Animated.View>
-            {/* Red Exclamation Badge */}
-            <View style={{
-              position: 'absolute',
-              top: -5,
-              right: -5,
-              backgroundColor: '#FF4444',
-              width: 12,
-              height: 12,
-              borderRadius: 6,
-              justifyContent: 'center',
-              alignItems: 'center',
-              borderWidth: 1,
-              borderColor: '#fff',
-            }} />
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      {/* Bet Type Selection */}
+      {/* Trophy Icon - Top Right */}
+      <TouchableOpacity 
+        style={{
+          position: 'absolute',
+          top: 60,
+          right: 20,
+          zIndex: 10,
+        }}
+        onPress={() => setShowCreatorRewards(true)}
+      >
+        <MaterialIcons 
+          name="emoji-events" 
+          size={32} 
+          color={theme.green}
+        />
+      </TouchableOpacity>
+
       <View style={{ marginBottom: 24 }}>
         <Text style={{ 
-          fontSize: 14, 
+          marginTop: 120,
+          fontSize: 26, 
           fontFamily: 'PressStart2P-Regular',
           color: theme.text, 
           marginBottom: 12,
           textTransform: 'uppercase'
         }}>
-          BET TYPE:
+          Whats your 
         </Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {betTypeOptions.map((option) => (
-            <TouchableOpacity
-              key={option.type}
-              onPress={() => setBetType(option.type)}
-              style={{
-                flex: 1,
-                backgroundColor: betType === option.type ? option.color : theme.card,
-                borderWidth: 3,
-                borderColor: betType === option.type ? option.color : theme.border,
-                borderRadius: 12,
-                padding: 12,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 20, marginBottom: 4 }}>
-                {option.icon}
-              </Text>
-              <Text style={{ 
-                fontSize: 10, 
-                fontFamily: 'PressStart2P-Regular',
-                color: betType === option.type ? '#fff' : theme.text,
-                textAlign: 'center',
-                marginBottom: 2,
-              }}>
-                {option.label}
-              </Text>
-              <Text style={{ 
-                fontSize: 8, 
-                fontFamily: 'PressStart2P-Regular',
-                color: betType === option.type ? '#fff' : theme.subtext,
-                textAlign: 'center',
-                opacity: 0.8,
-              }}>
-                {option.description}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Text style={{ 
+          fontSize: 32,
+          marginTop: 12,
+          
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.green, 
+          marginBottom: 12,
+        }}>
+          VIRAL TAKE?
+        </Text>
       </View>
-
       {/* Main Question Input - Retro Style */}
       <View style={{ marginBottom: 24 }}>
         <Text style={{ 
@@ -353,7 +265,7 @@ export default function CreateBetScreen() {
           padding: 2, // Thin padding for pixel border effect
         }}>
           <TextInput 
-            placeholder="e.g., Will Apple stock go up today?" 
+            placeholder="e.g., who would win?" 
             value={description} 
             onChangeText={setDescription}
             style={{
@@ -387,7 +299,7 @@ export default function CreateBetScreen() {
               padding: 2,
             }}>
               <TextInput 
-                placeholder={`Option ${idx + 1}`} 
+                placeholder={`...`} 
                 value={ans} 
                 onChangeText={text => setAnswers(a => a.map((v, i) => (i === idx ? text : v)))}
                 style={{
@@ -402,6 +314,67 @@ export default function CreateBetScreen() {
             </View>
           </View>
         ))}
+      </View>
+
+      {/* Bet Type Selection */}
+      <View style={{ marginBottom: 24 }}>
+        <Text style={{ 
+          fontSize: 14, 
+          fontFamily: 'PressStart2P-Regular',
+          color: theme.text, 
+          marginBottom: 12,
+          textTransform: 'uppercase'
+        }}>
+          BET TYPE:
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {betTypeOptions.map((option) => (
+            <TouchableOpacity
+              key={option.type}
+              onPress={() => setBetType(option.type)}
+              style={{
+                flex: 1,
+                backgroundColor: betType === option.type ? option.color : theme.card,
+                borderWidth: 3,
+                borderColor: betType === option.type ? option.color : theme.border,
+                borderRadius: 12,
+                padding: 12,
+                alignItems: 'center',
+              }}
+            >
+              {/* Show bonk icon as image if bonk type, else as text or nothing */}
+              {option.type === 'bonk' ? (
+                <Image
+                  source={require('../assets/images/bonk.png')}
+                  style={{ width: 28, height: 28, marginBottom: 4 }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Text style={{ fontSize: 20, marginBottom: 4 }}>
+                  {option.icon}
+                </Text>
+              )}
+              <Text style={{ 
+                fontSize: 10, 
+                fontFamily: 'PressStart2P-Regular',
+                color: betType === option.type ? '#fff' : theme.text,
+                textAlign: 'center',
+                marginBottom: 2,
+              }}>
+                {option.label}
+              </Text>
+              <Text style={{ 
+                fontSize: 8, 
+                fontFamily: 'PressStart2P-Regular',
+                color: betType === option.type ? '#fff' : theme.subtext,
+                textAlign: 'center',
+                opacity: 0.8,
+              }}>
+                {option.description}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* Generated Image Preview */}
@@ -512,50 +485,7 @@ export default function CreateBetScreen() {
             </View>
           )}
 
-          {/* Bet Amount */}
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{ 
-              fontSize: 14, 
-              fontFamily: 'PressStart2P-Regular',
-              color: theme.text, 
-              marginBottom: 12,
-              textTransform: 'uppercase'
-            }}>
-              {betType === 'bonk' ? 'BONK AMOUNT' : 'ENTRY FEE'}
-            </Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
-              contentContainerStyle={{ paddingRight: 20 }}
-            >
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {amountOptions.map((option) => (
-                  <RetroButton
-                    key={option.amount}
-                    title={betType === 'bonk' ? `${option.amount * 1000} BONK` : `${option.amount} SOL`}
-                    onPress={() => setBetAmount(option.amount.toString())}
-                    backgroundColor={betAmount === option.amount.toString() ? option.color : theme.card}
-                    textColor={betAmount === option.amount.toString() ? '#fff' : theme.text}
-                    fontSize={12}
-                    letterSpacing={0}
-                    fontWeight="normal"
-                    minHeight={40}
-                    minWidth={80}
-                    textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-                  >
-                    <Text style={{ 
-                      fontSize: 10, 
-                      fontFamily: 'PressStart2P-Regular',
-                      color: betAmount === option.amount.toString() ? '#fff' : theme.subtext,
-                      marginTop: 4
-                    }}>
-                      {option.label}
-                    </Text>
-                  </RetroButton>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
+          {/* Removed Bet Amount/Entry Fee column */}
         </View>
       )}
 
@@ -657,6 +587,77 @@ export default function CreateBetScreen() {
           </View>
 
          
+        </View>
+      </Modal>
+
+      {/* Creator Rewards Modal Popup */}
+      <Modal
+        visible={showCreatorRewards}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowCreatorRewards(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={() => setShowCreatorRewards(false)}
+        />
+        <View style={{
+          position: 'absolute',
+          top: '20%',
+          left: 20,
+          right: 20,
+          backgroundColor: themeName === 'dark' ? '#2d2640' : '#fff',
+          borderRadius: 20,
+          padding: 24,
+          shadowColor: theme.shadow,
+          shadowOpacity: 0.3,
+          shadowRadius: 20,
+          shadowOffset: { width: 0, height: 10 },
+          elevation: 15,
+        }}>
+          {/* Close Button */}
+          <TouchableOpacity
+            onPress={() => setShowCreatorRewards(false)}
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              backgroundColor: themeName === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.2)',
+              borderRadius: 16,
+              width: 32,
+              height: 32,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <MaterialIcons name="close" size={20} color={theme.text} />
+          </TouchableOpacity>
+
+          {/* Trophy Icon */}
+          
+          <Text style={{ 
+            fontSize: 18,
+            marginTop: 56,
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.text, 
+            textAlign: 'center', 
+            marginBottom: 16,
+            fontWeight: 'bold',
+          }}>
+            CREATOR REWARDS
+          </Text>
+          
+          <Text style={{ 
+            fontSize: 16, 
+            color: 'red', 
+            marginBottom: 16, 
+            lineHeight: 24, 
+            textAlign: 'center',
+            fontFamily: 'PressStart2P-Regular',
+          }}>
+            Earn total 5 percent of trading fees of your market.
+          </Text>
+
         </View>
       </Modal>
     </ScrollView>

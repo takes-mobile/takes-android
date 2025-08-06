@@ -95,12 +95,18 @@ function LayoutWithNav() {
     background: '#fff',
     text: '#000',
     border: '#e5e7eb',
+    primary: '#8b5cf6', // Purple accent
+    secondary: '#a78bfa', // Lighter purple
+    accent: '#f3f4f6', // Light purple tint for backgrounds
   };
   
   const darkTheme = {
     background: '#1e1a2c', // Dark purple background
     text: '#fff',
     border: '#4a3f66', // Medium purple border
+    primary: '#8b5cf6', // Purple accent
+    secondary: '#a78bfa', // Lighter purple
+    accent: '#2d2640', // Dark purple tint for backgrounds
   };
   
   const theme = themeName === 'dark' ? darkTheme : lightTheme;
@@ -122,7 +128,7 @@ function LayoutWithNav() {
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="create-bet" options={{ title: 'Create Bet' }} />
+        <Stack.Screen name="create-bet" options={{ headerShown: false }} />
         <Stack.Screen name="live-bets" options={{ headerShown: false }} />
       </Stack>
       {user && <BottomNav />}

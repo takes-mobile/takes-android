@@ -89,11 +89,11 @@ const SampleBetPreview = ({ theme }: { theme: any }) => {
         borderColor: 'rgba(255,255,255,1)', // changed from black to white
       }}>
         <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
-          "Who would win gorilla vs. 100 men?"
+          "What is the meaning of life?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Yes: 65%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>No: 35%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>Love: 42%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>Purpose: 58%</Text>
         </View>
       </View>
     </Animated.View>
@@ -139,12 +139,29 @@ const TopSampleBetPreview = ({ theme }: { theme: any }) => {
         borderWidth: 1,
         borderColor: 'rgba(139,92,246,0.2)',
       }}>
-        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
-          "Who will win the Super Bowl?"
+        <Text style={{ 
+          color: theme.text, 
+          fontSize: 14, 
+          fontWeight: '600', 
+          marginBottom: 8,
+          fontFamily: 'System',
+          letterSpacing: 0.5,
+        }}>
+          "Is pineapple on pizza acceptable?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team A: 45%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team B: 55%</Text>
+          <Text style={{ 
+            color: theme.subtext, 
+            fontSize: 12,
+            fontFamily: 'System',
+            fontWeight: '500',
+          }}>Yes: 48%</Text>
+          <Text style={{ 
+            color: theme.subtext, 
+            fontSize: 12,
+            fontFamily: 'System',
+            fontWeight: '500',
+          }}>No: 52%</Text>
         </View>
       </View>
     </Animated.View>
@@ -191,11 +208,11 @@ const MiddleSampleBetPreview = ({ theme }: { theme: any }) => {
         borderColor: 'rgba(34,197,94,0.2)',
       }}>
         <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
-          "Will Apple stock go up today?"
+          "Should cats be allowed to vote?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>Yes: 72%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>No: 28%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 11 }}>Yes: 67%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 11 }}>No: 33%</Text>
         </View>
       </View>
     </Animated.View>
@@ -740,8 +757,10 @@ export default function LoginScreen() {
 
             {/* Google Button */}
             <RetroButton
-              backgroundColor="#FFFFFF"
-              textColor="#000000"
+              title="Connect Wallet"
+              backgroundColor="#a259f7"
+              textColor="#fff"
+              textShadowColor="#000"
               fontSize={12}
               letterSpacing={0}
               fontWeight="normal"
@@ -753,23 +772,7 @@ export default function LoginScreen() {
                 oauth.login({ provider: 'google' } as LoginWithOAuthInput);
               }}
             >
-              <View style={{ 
-                flexDirection: 'row', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                width: '80%'
-              }}>
-                <Text style={{ 
-                  color: '#000000',
-                  fontFamily: 'PressStart2P-Regular',
-                  fontSize: 12,
-                  textAlign: 'center',
-                  marginBottom: 10, 
-                }}>
-                  Continue with 
-                </Text>
-                <Image source={require('../assets/images/google.webp')} style={{ marginBottom : 10, marginLeft: 6, width: 20, height: 20 }} />
-              </View>
+              
             </RetroButton>
           </View>
 

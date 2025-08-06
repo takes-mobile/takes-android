@@ -5,6 +5,7 @@ import { ThemeContext } from './_layout';
 import { useBets, Bet } from '../context/BetsContext';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DonutChart from '../components/DonutChart';
 
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
@@ -27,7 +28,7 @@ export default function LiveBetsScreen() {
     if (themeName === 'light') {
       return {
         background: '#ffffff', // White background
-        card: '#f8f9fa', // Light gray card background
+        card: 'rgb(138, 92, 246, 0.2)', // Very light purple card background
         text: '#1a1a1a', // Dark text
         subtext: '#6b7280', // Gray subtext
         primary: '#8b5cf6', // Purple primary
@@ -36,12 +37,12 @@ export default function LiveBetsScreen() {
         warning: '#EF4444', // Red warning
         orange: '#F97316', // Orange
         pink: '#EC4899', // Pink
-        border: '#e5e7eb', // Light border
-        cardShadow: 'rgba(0, 0, 0, 0.1)', // Light shadow
+        border: 'rgb(181, 149, 255)', // Light purple border
+        cardShadow: 'rgb(201, 178, 255)', // Light purple shadow
       };
     } else {
       return {
-        background: '#1e1a2c', // Dark purple background
+        background: 'rgba(35, 0, 100, 0.71)', // White background for dark mode too
         card: 'rgba(200,182,232,0.1)', // Translucent light purple
         text: '#FFFFFF', // White text
         subtext: '#c8b6e8', // Light purple subtext
@@ -52,12 +53,25 @@ export default function LiveBetsScreen() {
         orange: '#F97316', // Orange
         pink: '#EC4899', // Pink
         border: '#4a3f66', // Dark border
-        cardShadow: 'rgba(0, 0, 0, 0.3)', // Dark shadow
+        cardShadow: 'rgb(255, 255, 255)', // Dark shadow
       };
     }
   };
 
   const theme = getTheme();
+
+  // Filter out expired bets
+  const activeBets = bets.filter(bet => {
+    // Keep timeless bets (they don't expire)
+    if (bet.betType === 'timeless') return true;
+    
+    // For other bet types, check if they're expired
+    if (!bet.endTime) return true; // Keep bets without end time
+    
+    const now = new Date();
+    const endTime = new Date(bet.endTime);
+    return now < endTime; // Only keep bets that haven't ended yet
+  });
 
   // Bets are now fetched from the BetsContext
 
@@ -81,6 +95,30 @@ export default function LiveBetsScreen() {
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     
     return `${hours}h ${minutes}m`;
+  };
+
+  const getTimeProgress = (bet: Bet) => {
+    if (!bet.endTime || !bet.createdAt) return 0;
+    
+    const end = new Date(bet.endTime);
+    const start = new Date(bet.createdAt);
+    const now = new Date();
+    
+    // Calculate total duration of the bet
+    const totalDuration = end.getTime() - start.getTime();
+    
+    // Calculate elapsed time
+    const elapsedTime = now.getTime() - start.getTime();
+    
+    // Calculate progress as percentage of time elapsed (red section)
+    const elapsedProgress = Math.max(0, Math.min(1, elapsedTime / totalDuration));
+    
+    // If bet has expired, return 1 (fully red)
+    if (now.getTime() >= end.getTime()) {
+      return 1;
+    }
+    
+    return elapsedProgress;
   };
 
   const formatSolAmount = (amount: number) => {
@@ -491,7 +529,8 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
     return (
       <View style={{
         height: screenHeight,
-        width: screenWidth
+        width: screenWidth,
+        backgroundColor: theme.background
       }}>
         {/* Background */}
         <View style={{
@@ -542,27 +581,39 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
               color: '#fff',
               textTransform: 'uppercase',
             }}>
-              {bet.betType === 'bonk' ? '🪙 BONK' : 
-               bet.betType === 'timeless' ? '♾️ TIMELESS' : '🎯 STANDARD'}
+              {bet.betType === 'bonk' ? (
+                <Image
+                  source={require('../assets/images/bonk.png')}
+                  style={{ width: 18, height: 18, marginRight: 4, marginBottom: -2 }}
+                  resizeMode="contain"
+                />
+              ) : 
+               bet.betType === 'timeless' ? '♾️ TIMELESS' : ' STANDARD'}
             </Text>
           </View>
 
           {/* Generated Image Display */}
           {generatedImage && (
-            <View style={{ marginBottom: 20 }}>
+            <View style={{ 
+              marginBottom: 20,
+              borderWidth: 2,
+              borderColor: theme.primary,
+              borderRadius: 12,
+              overflow: 'hidden'
+            }}>
               <Image 
                 source={{ uri: generatedImage }} 
                 style={{ 
                   width: '100%', 
                   height: 200, 
-                  borderRadius: 12,
+                  borderRadius: 10,
                 }} 
                 resizeMode="cover"
               />
             </View>
           )}
 
-          {/* Question Display - Normal text without typewriter effect */}
+          {/* Question Display - Retro gaming style */}
           <View style={{ 
             paddingTop: 35,
             paddingBottom: 15, 
@@ -571,18 +622,27 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
             marginBottom: 20 
           }}>
             <Text style={{
-              fontSize: 24,
+              fontSize: 16,
               fontWeight: 'bold',
-              color: "#1ba614",
-              lineHeight: 32,
-              fontFamily: 'PressStart2P-Regular'
+              color: theme.text,
+              lineHeight: 22,
+              fontFamily: 'PressStart2P-Regular',
+              textAlign: 'center',
+              textTransform: 'uppercase'
             }}>
               {bet.question}
             </Text>
           </View>
 
-          {/* Answer Options - VS layout vertical */}
-          <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginVertical: 30 }}>
+          {/* Answer Options - VS layout vertical like in the image */}
+          <View style={{ 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            marginVertical: 30,
+            paddingHorizontal: 20
+          }}>
+            {/* First Option */}
             <TouchableOpacity 
               onPress={() => {
                 if (!isExpired && bet.isActive) {
@@ -594,7 +654,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                 }
               }}
               style={{
-                width: '80%',
+                width: '100%',
                 padding: 16,
                 marginBottom: 10,
                 alignItems: 'center',
@@ -602,22 +662,35 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
               }}
             >
               <Text style={{
-                fontSize: 24,
-                color: themeName === 'light' ? '#000000' : '#FFFFFF',
+                fontSize: 22,
+                color: theme.text,
                 fontWeight: 'bold',
                 textAlign: 'center',
                 fontFamily: 'PressStart2P-Regular',
                 textDecorationLine: 'underline',
-                textShadowColor: themeName === 'light' ? 'rgba(0,0,0)' : 'rgba(255,255,255)',
+                textShadowColor: 'rgba(255, 255, 255, 0.3)',
                 textShadowOffset: { width: 1, height: 1 },
                 textShadowRadius: 2,
+                textTransform: 'uppercase'
               }}>
                 {bet.options[0] || 'Option 1'}
               </Text>
             </TouchableOpacity>
             
-            <Image source={require('../assets/images/vs.png')} style={{ width: 40, height: 40, marginHorizontal: 10 }} />
+            {/* VS Text */}
+            <Text style={{
+              fontSize: 18,
+              color: "#EF4444",
+              fontWeight: 'bold',
+              textAlign: 'center',
+              fontFamily: 'PressStart2P-Regular',
+              marginVertical: 8,
+              textTransform: 'uppercase'
+            }}>
+              VS
+            </Text>
         
+            {/* Second Option */}
             <TouchableOpacity 
               onPress={() => {
                 if (!isExpired && bet.isActive) {
@@ -629,23 +702,23 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                 }
               }}
               style={{
-                width: '40%',
-                padding: 12,
-                marginLeft: 5,
+                width: '100%',
+                padding: 16,
                 alignItems: 'center',
                 opacity: isExpired || !bet.isActive ? 0.6 : 1,
               }}
             >
               <Text style={{
-                fontSize: 20,
-                color: themeName === 'light' ? '#000000' : '#FFFFFF',
+                fontSize: 22,
+                color: theme.text,
                 fontWeight: 'bold',
                 textAlign: 'center',
                 fontFamily: 'PressStart2P-Regular',
                 textDecorationLine: 'underline',
-                textShadowColor: themeName === 'light' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)',
+                textShadowColor: 'rgba(0,0,0,0.3)',
                 textShadowOffset: { width: 1, height: 1 },
                 textShadowRadius: 2,
+                textTransform: 'uppercase'
               }}>
                 {bet.options[1] || 'Option 2'}
               </Text>
@@ -665,21 +738,21 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
               flex: 1,
               justifyContent: 'center',
               alignItems: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              backgroundColor: themeName === 'light' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.92)',
             }}>
               <View style={{
                 width: '85%',
-                backgroundColor: theme.card,
+                backgroundColor: themeName === 'light' ? 'rgba(255, 255, 255, 0.95)' : 'rgba(30, 26, 44, 0.95)',
                 borderRadius: 20,
                 padding: 20,
                 alignItems: 'center',
-                shadowColor: theme.cardShadow,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: themeName === 'light' ? 0.15 : 0.25,
-                shadowRadius: 4,
-                elevation: 5,
-                borderWidth: 1,
-                borderColor: theme.primary,
+                shadowColor: themeName === 'light' ? '#000000' : theme.cardShadow,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: themeName === 'light' ? 0.3 : 0.25,
+                shadowRadius: 8,
+                elevation: 10,
+                borderWidth: 2,
+                borderColor: themeName === 'light' ? '#8b5cf6' : theme.primary,
               }}>
                 <Text style={{
                   fontSize: 20,
@@ -699,12 +772,12 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                   textAlign: 'center',
                   fontFamily: 'PressStart2P-Regular'
                 }}>
-                  {bet.betType === 'bonk' ? 'Enter amount of BONK to bet' : 'Enter amount of SOL to bet'}
+                  {bet.betType === 'bonk' ? 'Enter amount of BONK to bet' : ''}
                 </Text>
                 
                 <TextInput
                   style={{
-                    backgroundColor: themeName === 'light' ? '#f3f4f6' : '#1a1625',
+                    backgroundColor: themeName === 'light' ? '#f8f9fa' : '#1a1625',
                     width: '100%',
                     padding: 16,
                     borderRadius: 12,
@@ -712,14 +785,14 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                     color: theme.text,
                     textAlign: 'center',
                     marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: theme.primary,
+                    borderWidth: 2,
+                    borderColor: themeName === 'light' ? '#8b5cf6' : theme.primary,
                   }}
                   value={betAmount}
                   onChangeText={setBetAmount}
                   keyboardType="decimal-pad"
                   placeholder={bet.betType === 'bonk' ? "100" : "0.1"}
-                  placeholderTextColor={themeName === 'light' ? '#9ca3af' : '#666'}
+                  placeholderTextColor={themeName === 'light' ? '#6b7280' : '#666'}
                 />
                 
                 <View style={{
@@ -783,12 +856,14 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                 }}>
                   <TouchableOpacity
                     style={{
-                      backgroundColor: themeName === 'light' ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.3)',
+                      backgroundColor: themeName === 'light' ? '#f3f4f6' : 'rgba(0,0,0,0.3)',
                       paddingVertical: 12,
                       paddingHorizontal: 20,
                       borderRadius: 12,
                       width: '48%',
                       alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: themeName === 'light' ? '#d1d5db' : 'transparent',
                     }}
                     onPress={() => setShowBetModal(false)}
                   >
@@ -844,57 +919,42 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
             }}
           >
             {/* Player Count */}
-            <View style={{ alignItems: 'center', marginBottom: 28 }}>
+            <View style={{ alignItems: 'center', marginBottom: 40 }}>
               <View style={{
-                backgroundColor: themeName === 'light' ? 'rgba(139,92,246,0.1)' : 'rgba(139,92,246,0.15)',
-                borderRadius: 32,
-                padding: 10,
-                borderWidth: 1,
-                borderColor: themeName === 'light' ? 'rgba(139,92,246,0.2)' : 'rgba(139,92,246,0.3)',
-                marginBottom: 4,
+               padding: 10,
+               marginBottom: 8,
               
               }}>
-                <Ionicons name="person-outline" size={22} color={theme.primary} />
+                <Text style={{
+                  fontSize: 50,
+                  color: theme.primary,
+                }}>
+                  🔥
+                </Text>
               </View>
-                             <Text style={{ fontSize: 13, color: theme.primary, fontWeight: 'bold', marginTop: 2, fontFamily: 'PressStart2P-Regular' }}>
+                             <Text style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2, marginBottom: 2, fontFamily: 'PressStart2P-Regular', color: theme.text }}>
                 {bet.totalParticipants}
               </Text>
-                             <Text style={{ fontSize: 11, color: theme.subtext, marginTop: -2, fontFamily: 'PressStart2P-Regular' }}>players</Text>
-            </View>
-            {/* Pool Size */}
-            <View style={{ alignItems: 'center', marginBottom: 28 }}>
-              <View style={{
-                backgroundColor: themeName === 'light' ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.15)',
-                borderRadius: 32,
-                padding: 10,
-                borderWidth: 1,
-                borderColor: themeName === 'light' ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.3)',
-                
-              }}>
-                <Ionicons name="wallet-outline" size={22} color={theme.success} />
-              </View>
-                             <Text style={{ marginBottom: 80,fontSize: 13, color: theme.success, fontWeight: 'bold', marginTop: 2, fontFamily: 'PressStart2P-Regular' }}>
-                {bet.betType === 'bonk' ? 
-                  `${(bet.solAmount * 1000).toFixed(0)} BONK` : 
-                  `${bet.solAmount} SOL`
-                }
-              </Text>
+                             <Text style={{ fontSize: 16, marginTop: -2, fontFamily: 'PressStart2P-Regular', color: theme.text }}>takes</Text>
             </View>
           </View>
                      {/* Time tag positioned bottom left aligned with pool size */}
            {bet.betType !== 'timeless' ? (
              <View style={{
                position: 'absolute',
-               bottom: 200,
+               bottom: 120,
                left: 18,
               flexDirection: 'row',
               alignItems: 'center',
-              zIndex: 10
+              zIndex: 10 
             }}>
-              <Ionicons name="hourglass-outline" size={24} color={theme.warning} />
-                           <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.warning, marginLeft: 4, fontFamily: 'PressStart2P-Regular' }}>
-                {formatTimeLeft(bet.endTime || '')}
-              </Text>
+              <DonutChart
+                progress={getTimeProgress(bet)}
+                size={80}
+                strokeWidth={10}
+                color="#ff0000"
+                backgroundColor="#00ff00"
+              />
             </View>
            ) : (
              <View style={{
@@ -938,7 +998,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
       {/* Fixed Header */}
 
       {/* Instagram-style Vertical Reel */}
-      {bets.length === 0 ? (
+      {activeBets.length === 0 ? (
         <View style={{
           flex: 1,
           justifyContent: 'center',
@@ -950,6 +1010,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
             textAlign: 'center',
             marginBottom: 16,
             fontFamily: 'PressStart2P-Regular',
+            textTransform: 'uppercase'
           }}>
             No bets available yet
           </Text>
@@ -958,6 +1019,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
             color: theme.subtext,
             textAlign: 'center',
             fontFamily: 'PressStart2P-Regular',
+            textTransform: 'uppercase'
           }}>
             Be the first to create a bet!
           </Text>
@@ -965,7 +1027,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
       ) : (
         <FlatList
           ref={flatListRef}
-          data={bets}
+          data={activeBets}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ flexGrow: 1 }}
           renderItem={({ item, index }) => (

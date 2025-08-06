@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, Animated, Alert } from 'react-native';
+import { View, Text, ScrollView, Image, TouchableOpacity, Dimensions, Animated, Alert, StatusBar } from 'react-native';
 import RetroButton from '../components/RetroButton';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { ThemeContext } from './_layout';
@@ -79,7 +79,7 @@ const MockStats = ({ theme }: { theme: any }) => {
       </View>
       <View style={{
         height: 6,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgb(255, 255, 255)',
         borderRadius: 3,
         overflow: 'hidden',
         marginBottom: 16,
@@ -404,36 +404,47 @@ export default function PreviewBetScreen() {
   };
 
   return (
-    <ScrollView 
-      style={{ 
-        flex: 1, 
-        backgroundColor: theme.background,
-      }} 
-      contentContainerStyle={{ 
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 40,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar backgroundColor="transparent" translucent barStyle={themeName === 'light' ? 'dark-content' : 'light-content'} />
+      
       <Animated.View style={{
         opacity: fadeAnim,
         transform: [{ translateY: slideAnim }],
       }}>
-        {/* Preview Card - Using same layout as live-bets */}
+        {/* Preview Card - Same as Live Bet */}
         <View style={{
-          backgroundColor: getCardBackgroundColor(),
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 24,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 10,
-          borderWidth: 2,
-          borderColor: getBorderColor(),
+          height: screenHeight,
+          width: screenWidth,
+          backgroundColor: theme.background
         }}>
+          {/* Background */}
+          <View style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: theme.background
+            }}
+          />
+          
+          {/* Card Content */}
+          <View style={{
+            flex: 1,
+            justifyContent: 'flex-start',
+            padding: 20,
+            backgroundColor: getCardBackgroundColor(),
+            borderRadius: 16,
+            margin: 10,
+            marginBottom: 40,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: themeName === 'light' ? 0.1 : 0.3,
+            shadowRadius: 8,
+            elevation: 10,
+            borderWidth: themeName === 'light' ? 1 : 2,
+            borderColor: getBorderColor(),
+          }}>
           {/* Bet Type Badge */}
           <View style={{ 
             position: 'absolute', 
@@ -492,78 +503,76 @@ export default function PreviewBetScreen() {
             </Text>
           </View>
 
-          {/* Answer Options - VS layout exactly as in sketch */}
-          {answersArr.length === 2 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 30 }}>
-              <View 
-                style={{
-                  width: '40%',
-                  backgroundColor: `${theme.primary}15`,
-                  borderRadius: 12,
-                  padding: 12,
-                  marginRight: 5,
-                  borderWidth: 1,
-                  borderColor: `${theme.primary}30`,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{
-                  fontSize: 16,
-                  color: theme.text,
-                  fontWeight: '600',
-                  textAlign: 'center',
-                }}>
-                  {answersArr[0].content}
-                </Text>
-              </View>
-              
-              <Image source={require('../assets/images/vs.png')} style={{ width: 40, height: 40, marginHorizontal: 10 }} />
-              
-              <View 
-                style={{
-                  width: '40%',
-                  backgroundColor: `${theme.warning}15`,
-                  borderRadius: 12,
-                  padding: 12,
-                  marginLeft: 5,
-                  borderWidth: 1,
-                  borderColor: `${theme.warning}30`,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{
-                  fontSize: 16,
-                  color: theme.text,
-                  fontWeight: '600',
-                  textAlign: 'center',
-                }}>
-                  {answersArr[1].content}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View style={{ marginBottom: 20 }}>
-              {answersArr.map((answer, idx) => (
-                <View key={idx} style={{
-                  backgroundColor: theme.card,
-                  borderRadius: 16,
-                  padding: 16,
-                  marginBottom: 12,
-                  borderWidth: 1,
-                  borderColor: `${theme.text}15`,
-                }}>
-                  <Text style={{
-                    fontSize: 18,
-                    color: theme.text,
-                    textAlign: 'center',
-                    fontWeight: '500',
-                  }}>
-                    {answer.content || '[No answer]'}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {/* Answer Options - VS layout vertical like in the image */}
+          <View style={{ 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            marginVertical: 30,
+            paddingHorizontal: 20
+          }}>
+            {/* First Option */}
+            <TouchableOpacity 
+              style={{
+                width: '100%',
+                padding: 16,
+                marginBottom: 10,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{
+                fontSize: 22,
+                color: theme.text,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                fontFamily: 'PressStart2P-Regular',
+                textDecorationLine: 'underline',
+                textShadowColor: 'rgba(255, 255, 255, 0.3)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2,
+                textTransform: 'uppercase'
+              }}>
+                {answersArr[0]?.content || 'Option 1'}
+              </Text>
+            </TouchableOpacity>
+            
+            {/* VS Text */}
+            <Text style={{
+              fontSize: 18,
+              color: "#EF4444",
+              fontWeight: 'bold',
+              textAlign: 'center',
+              fontFamily: 'PressStart2P-Regular',
+              marginVertical: 8,
+              textTransform: 'uppercase'
+            }}>
+              VS
+            </Text>
+        
+            {/* Second Option */}
+            <TouchableOpacity 
+              style={{
+                width: '100%',
+                padding: 16,
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{
+                fontSize: 22,
+                color: theme.text,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                fontFamily: 'PressStart2P-Regular',
+                textDecorationLine: 'underline',
+                textShadowColor: 'rgba(0,0,0,0.3)',
+                textShadowOffset: { width: 1, height: 1 },
+                textShadowRadius: 2,
+                textTransform: 'uppercase'
+              }}>
+                {answersArr[1]?.content || 'Option 2'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
 
           {/* Stats positioned at bottom right as per sketch */}
@@ -641,24 +650,24 @@ export default function PreviewBetScreen() {
           )}
 
           {/* SocialProof REMOVED */}
+          
+          {/* Publish Button */}
+          <RetroButton
+            title={isPublishing ? 'Creating...' : 'Create Bet'}
+            onPress={handlePublishBet}
+            disabled={isPublishing}
+            backgroundColor="#29d620"
+            textColor="#FFFFFF"
+            fontSize={24}
+            letterSpacing={0.5}
+            minWidth={screenWidth - 40}
+            minHeight={56}
+            style={{ marginTop: 10 }}
+            textShadowColor='black'
+          />
         </View>
-
-        {/* Publish Button */}
-        <RetroButton
-       
-          title={isPublishing ? 'Creating...' : 'Create Bet'}
-          onPress={handlePublishBet}
-          disabled={isPublishing}
-          backgroundColor="#29d620"
-          textColor="#FFFFFF"
-          fontSize={24}
-          letterSpacing={0.5}
-          minWidth={screenWidth - 40}
-          minHeight={56}
-          style={{ marginTop: 10 }}
-          textShadowColor='black'
-        />
-      </Animated.View>
-    </ScrollView>
+      </View>
+    </Animated.View>
+  </View>
   );
 }

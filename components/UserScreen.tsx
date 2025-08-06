@@ -177,31 +177,7 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
       shadowOffset: { width: 0, height: 2 },
       elevation: 3,
     }}>
-      {/* Bet Type Badge */}
-      {bet.betType && (
-        <View style={{
-          position: 'absolute',
-          top: 12,
-          right: 12,
-          backgroundColor: bet.betType === 'bonk' ? '#F97316' : 
-                         bet.betType === 'timeless' ? '#8b5cf6' : '#22c55e',
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: '#fff',
-        }}>
-          <Text style={{
-            fontSize: 8,
-            fontFamily: 'PressStart2P-Regular',
-            color: '#fff',
-            textTransform: 'uppercase',
-          }}>
-            {bet.betType === 'bonk' ? '🪙 BONK' : 
-             bet.betType === 'timeless' ? '♾️ TIMELESS' : '🎯 STANDARD'}
-          </Text>
-        </View>
-      )}
+
 
       {/* Generated Image Display */}
       {bet.generatedImage && (
@@ -239,21 +215,18 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
         borderColor: theme.green + '40',
       }}>
         <Text style={{
-          fontSize: 14,
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.green,
-          fontWeight: '600',
-          marginBottom: 4,
-        }}>
-          Your Bet: {userOption}
-        </Text>
-        <Text style={{
           fontSize: 16,
           fontFamily: 'PressStart2P-Regular',
           color: theme.text,
           fontWeight: 'bold',
         }}>
-          Amount: {userBetAmount} {bet.betType === 'bonk' ? 'BONK' : 'SOL'}
+          {(() => {
+            let displayAmount = userBetAmount;
+            if (bet.betType === 'bonk' && parseFloat(userBetAmount) >= 1000) {
+              displayAmount = (parseFloat(userBetAmount) / 1000).toFixed(1) + 'k';
+            }
+            return `${displayAmount} ${bet.betType === 'bonk' ? 'BONK' : 'SOL'} on ${userOption}`;
+          })()}
         </Text>
       </View>
 
@@ -282,15 +255,7 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition }: {
           </Text> */}
         </View>
         
-        <Text style={{
-          fontSize: 12,
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.subtext,
-        }}>
-          Pool: {bet.betType === 'bonk' ? 
-            `${(bet.totalPool * 1).toFixed(0)} BONK` : 
-            `${bet.totalPool.toFixed(2)} SOL`}
-        </Text>
+
         
         {/* <Text style={{
           fontSize: 12,
@@ -442,10 +407,12 @@ export const UserScreen = () => {
   const [lastProcessedDeepLink, setLastProcessedDeepLink] = useState<string>('');
   const [lastProcessedTime, setLastProcessedTime] = useState<number>(0);
   const [solPrice, setSolPrice] = useState<number | null>(null);
+  const [bonkPrice, setBonkPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'live' | 'previous'>('live');
   const [userBets, setUserBets] = useState<any[]>([]);
   const [loadingBets, setLoadingBets] = useState(false);
   const [endingPosition, setEndingPosition] = useState<string | null>(null);
+  const [withdrawnBets, setWithdrawnBets] = useState<Set<string>>(new Set());
   const { width: windowWidth, height: screenHeight } = Dimensions.get('window');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
@@ -529,38 +496,50 @@ export const UserScreen = () => {
   }, [account?.address, fetchBalance]);
 
   useEffect(() => {
-    // Fetch real-time SOL price in USD using Jupiter
-    const fetchSolPrice = async () => {
+    // Fetch real-time SOL and BONK prices in USD
+    const fetchPrices = async () => {
       try {
-        // SOL mint address
+        // SOL price using Jupiter
         const SOL_MINT = 'So11111111111111111111111111111111111111112';
-        // USDC mint address  
         const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-        // 1 SOL in lamports
         const oneSOLInLamports = 1000000000;
         
-        const response = await fetch(
+        const solResponse = await fetch(
           `https://quote-api.jup.ag/v6/quote?inputMint=${SOL_MINT}&outputMint=${USDC_MINT}&amount=${oneSOLInLamports}&slippageBps=50`
         );
         
-        if (response.ok) {
-          const data = await response.json();
-          // Convert USDC amount (6 decimals) to USD price
-          const usdcAmount = parseInt(data.outAmount) / 1000000; // USDC has 6 decimals
+        if (solResponse.ok) {
+          const solData = await solResponse.json();
+          const usdcAmount = parseInt(solData.outAmount) / 1000000;
           setSolPrice(usdcAmount);
         }
+
+        // BONK price using Jupiter
+        const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
+        const oneBONKInSmallestUnit = 100000; // BONK has 5 decimals
+        
+        const bonkResponse = await fetch(
+          `https://quote-api.jup.ag/v6/quote?inputMint=${BONK_MINT}&outputMint=${USDC_MINT}&amount=${oneBONKInSmallestUnit}&slippageBps=50`
+        );
+        
+        if (bonkResponse.ok) {
+          const bonkData = await bonkResponse.json();
+          const bonkUsdcAmount = parseInt(bonkData.outAmount) / 1000000;
+          setBonkPrice(bonkUsdcAmount);
+        }
       } catch (error) {
-        console.error('Error fetching SOL price from Jupiter:', error);
+        console.error('Error fetching prices from Jupiter:', error);
         // Fallback to CoinGecko if Jupiter fails
         try {
-          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+          const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana,bonk&vs_currencies=usd');
           const data = await res.json();
-          setSolPrice(data.solana.usd);
+          setSolPrice(data.solana?.usd || null);
+          setBonkPrice(data.bonk?.usd || null);
         } catch {}
       }
     };
-    fetchSolPrice();
-    const interval = setInterval(fetchSolPrice, 60000); // update every 60s
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 60000); // update every 60s
     return () => clearInterval(interval);
   }, []);
 
@@ -855,6 +834,21 @@ useEffect(() => {
     }
   };
 }, [handleDeepLink]); // Add handleDeepLink to dependencies
+
+  // Helper function to check if user has withdrawn from a bet
+  const isBetWithdrawn = async (bet: any, userWallet: string) => {
+    try {
+      const userParticipation = bet.participants?.find((p: any) => p.wallet === userWallet);
+      if (!userParticipation) return false;
+      
+      const tokenMint = bet.tokenAddresses[userParticipation.optionIndex];
+      const tokenBalance = await getTokenBalance(userWallet, tokenMint);
+      return tokenBalance <= 0;
+    } catch (error) {
+      console.error('Error checking if bet is withdrawn:', error);
+      return false;
+    }
+  };
 
   // Fetch user's bets
   const fetchUserBets = async () => {
@@ -1284,12 +1278,12 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             <MaterialIcons name="settings" size={22} color={theme.text} />
           </TouchableOpacity>
         </View>
-        {/* Profile picture and name/username beside it */}
+        {/* Profile picture and username beside it */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            marginTop: 60, // Adjusted for smaller buttons
+            marginTop: 60,
             paddingHorizontal: 24,
             paddingBottom: 24,
             backgroundColor: theme.card,
@@ -1302,6 +1296,11 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             shadowRadius: 8,
             shadowOffset: { width: 0, height: 2 },
             elevation: 4,
+            borderRadius: 44,
+            borderWidth: 3,
+            borderColor: theme.border,
+            backgroundColor: theme.card,
+            marginBottom: -60, // Makes it half intersect with the dividing line
           }}>
             {twitterPfp ? (
               <Image 
@@ -1309,10 +1308,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
                 style={{ 
                   width: 88, 
                   height: 88, 
-                  borderRadius: 44, 
-                  borderWidth: 4, 
-                  borderColor: theme.card, 
-                  backgroundColor: theme.card 
+                  borderRadius: 44,
                 }} 
               />
             ) : (
@@ -1320,28 +1316,21 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
                 name="account-circle" 
                 size={88} 
                 color={theme.green} 
-                style={{ backgroundColor: theme.card, borderRadius: 44 }} 
+                style={{ borderRadius: 44 }} 
               />
             )}
           </View>
-          <View style={{ marginLeft: 20, flex: 1, justifyContent: 'center' }}>
+          <View style={{ marginLeft: 24, flex: 1, justifyContent: 'center' }}>
             <Text style={{
               fontFamily: 'PressStart2P-Regular',
-              fontSize: 18,
+              fontSize: 20,
               color: theme.text,
               textShadowColor: 'rgba(0,0,0,0.7)',
               textShadowOffset: { width: 1, height: 1 },
               textShadowRadius: 0,
-              marginBottom: 6,
-              flexShrink: 1,
-            }}>
-              {twitterAccount?.name || 'User'}
-            </Text>
-            <Text style={{
-              fontFamily: 'PressStart2P-Regular',
-              fontSize: 14,
-              color: theme.subtext,
               marginBottom: 0,
+              marginTop: 24,
+              
               flexShrink: 1,
             }}>
               @{twitterAccount?.username || 'user'}
@@ -1352,51 +1341,98 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
 
       {/* Wallet Balance Card */}
       <View style={{ backgroundColor: theme.card, borderRadius: 18, marginHorizontal: 18, marginTop: 18, padding: 18, alignItems: 'flex-start', borderWidth: 3, borderColor: theme.border, shadowColor: theme.shadow, shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 3 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 8 }}>
+          <Text style={{ 
+            fontSize: 14, 
+            color: theme.text, 
+            fontFamily: 'PressStart2P-Regular',
+            textAlign: 'left',
+            textTransform: 'uppercase'
+          }}>
+            
+          </Text>
+          <TouchableOpacity
+            onPress={fetchBalance}
+            style={{
+              backgroundColor: theme.green,
+              borderRadius: 8,
+              padding: 8,
+              borderWidth: 2,
+              borderColor: theme.border,
+            }}
+            disabled={loadingBalance}
+          >
+            <MaterialIcons 
+              name="refresh" 
+              size={16} 
+              color="#000" 
+            />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Total USD Value */}
         <Text style={{ 
-          fontSize: 14, 
-          color: theme.text, 
-          fontFamily: 'PressStart2P-Regular',
-          marginBottom: 8, 
-          textAlign: 'left',
-          textTransform: 'uppercase'
-        }}>
-          your BALANCE
-        </Text>
-        <Text style={{ 
-          fontSize: 24, 
+          fontSize: 32, 
           fontFamily: 'PressStart2P-Regular',
           color: theme.green, 
           marginTop: 12, 
+          marginBottom: 12,
           textAlign: 'left',
           textShadowColor: 'rgba(0,0,0,0.7)',
           textShadowOffset: { width: 1, height: 1 },
           textShadowRadius: 0,
         }}>
-          {solBalance && solPrice ? `$${(parseFloat(solBalance) * solPrice).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : loadingBalance ? 'Loading...' : '-'}
+          {(() => {
+            let totalUSD = 0;
+            let hasData = false;
+            
+            // Add SOL value
+            if (solBalance && solPrice) {
+              totalUSD += parseFloat(solBalance) * solPrice;
+              hasData = true;
+            }
+            
+            // Add BONK value
+            if (bonkBalance && bonkPrice && parseFloat(bonkBalance) > 0) {
+              totalUSD += parseFloat(bonkBalance) * bonkPrice;
+              hasData = true;
+            }
+            
+            return hasData ? 
+              `$${totalUSD.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 
+              loadingBalance ? 'Loading...' : '-';
+          })()}
         </Text>
         
-        {/* SOL Balance */}
-        <Text style={{ 
-          fontSize: 14, 
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.subtext, 
-          marginTop: 12,
-          marginBottom: 4, 
-          textAlign: 'left' 
-        }}>
-          {solBalance !== null ? `${solBalance} SOL` : ''}
-        </Text>
-        
-        {/* BONK Balance */}
-        <Text style={{ 
-          fontSize: 14, 
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.orange || '#F97316', 
-          marginBottom: 8, 
-          textAlign: 'left' 
-        }}>
-          {bonkBalance !== null ? `${bonkBalance} BONK` : 'Loading BONK...'}
-        </Text>
+        {/* SOL and BONK Balances Side by Side */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 12 }}>
+          <Text style={{ 
+            fontSize: 14, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.subtext, 
+            textAlign: 'left' 
+          }}>
+            {solBalance !== null ? `${solBalance} SOL` : ''}
+          </Text>
+          
+          <Text style={{ 
+            fontSize: 14, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.orange || '#F97316', 
+            textAlign: 'right' 
+          }}>
+            {bonkBalance !== null ? 
+              `${parseFloat(bonkBalance) >= 1000 ? 
+                ((parseFloat(bonkBalance) / 1000) % 1 === 0 ? 
+                  Math.floor(parseFloat(bonkBalance) / 1000) + 'K' : 
+                  (parseFloat(bonkBalance) / 1000).toFixed(1) + 'K'
+                ) : 
+                parseFloat(bonkBalance).toFixed(0)
+              } BONK` : 
+              'Loading BONK...'
+            }
+          </Text>
+        </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
           <Text style={{ 
             color: theme.green, 
@@ -1439,8 +1475,8 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
         <RetroButton
           title="WITHDRAW"
           onPress={() => setShowWithdrawModal(true)}
-          backgroundColor="#F97316" // Orange for withdraw
-          textColor="#000000"
+          backgroundColor="#EF4444" // Red for withdraw
+          textColor="#FFFFFF"
           fontSize={14}
           letterSpacing={0}
           fontWeight="normal"
@@ -1887,7 +1923,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
         ) : (
           <>
             {activeTab === 'live' ? (
-              // Live bets
+              // Live bets (only active bets that haven't ended)
               userBets.filter(bet => bet.isActive && new Date(bet.endTime) > new Date()).length === 0 ? (
                 <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
                   <Text style={{ 
@@ -1913,7 +1949,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
                   ))
               )
             ) : (
-              // Previous bets (ended or inactive)
+              // Previous bets (ended, inactive, or withdrawn)
               userBets.filter(bet => !bet.isActive || new Date(bet.endTime) <= new Date()).length === 0 ? (
                 <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border }}>
                   <Text style={{ 

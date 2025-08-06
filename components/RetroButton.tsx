@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Pressable, Text, View, StyleSheet, ViewStyle, TextStyle, TextProps } from 'react-native';
+import { Pressable, Text, View, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import { Audio } from 'expo-av';
 
 interface RetroButtonProps {
@@ -49,12 +49,16 @@ export const RetroButton: React.FC<RetroButtonProps> = ({
 
   // Load sound on component mount
   useEffect(() => {
+    let mounted = true;
+    
     const loadSound = async () => {
       try {
         const { sound } = await Audio.Sound.createAsync(
           require('../assets/audios/sound.mp4')
         );
-        setSound(sound);
+        if (mounted) {
+          setSound(sound);
+        }
       } catch (error) {
         console.log('Error loading sound:', error);
       }
@@ -64,8 +68,9 @@ export const RetroButton: React.FC<RetroButtonProps> = ({
 
     // Cleanup sound on unmount
     return () => {
+      mounted = false;
       if (sound) {
-        sound.unloadAsync();
+        sound.unloadAsync().catch(console.error);
       }
     };
   }, []);
