@@ -3,7 +3,7 @@ import BottomNav from '../components/BottomNav';
 import { usePrivy, PrivyProvider } from '@privy-io/expo';
 import Constants from 'expo-constants';
 import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, LogBox } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { useFonts } from 'expo-font';
@@ -12,6 +12,9 @@ import { BetsProvider } from '../context/BetsContext';
 export const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} });
 
 export default function Layout() {
+  // Disable error overlays and warnings for demo
+  LogBox.ignoreAllLogs();
+  
   const [fontsLoaded] = useFonts({
     'PressStart2P-Regular': require('../assets/fonts/PressStart2P-Regular.ttf'),
   });
@@ -19,11 +22,15 @@ export default function Layout() {
   if (!fontsLoaded) {
     return null; // Return null or a loading screen while fonts are loading
   }
+  const appId = process.env.EXPO_PUBLIC_PRIVY_APP_ID;
+  const clientId = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID;
+
 
   return (
     <PrivyProvider
-      appId="cmdfmgl76001qlh0mi0ggzx5l"
-      clientId="client-WY6NvgKMnByoyauWRNvgPku7dBs3VtJeYxseJm48kDUtk"
+    //@ts-ignore
+      appId={process.env.EXPO_PUBLIC_PRIVY_APP_ID}
+      clientId={process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID}
     >
       <ThemeProvider>
         <BetsProvider>

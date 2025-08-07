@@ -81,6 +81,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "development": {
+      "developmentClient": {
+        "silenceUnusedWarnings": true
+      }
     }
   }
 }

@@ -256,10 +256,14 @@ export default function CreateBetScreen() {
         <Text style={{ 
           fontSize: 32,
           marginTop: 12,
-          
           fontFamily: 'PressStart2P-Regular',
           color: theme.green, 
           marginBottom: 12,
+          textShadowColor: 'rgba(0, 0, 0, 0.8)',
+          textShadowOffset: { width: 4, height: 4 },
+          textShadowRadius: 0,
+          fontWeight: 'bold',
+          
         }}>
           VIRAL TAKE?
         </Text>
@@ -427,39 +431,41 @@ export default function CreateBetScreen() {
         </View>
       )}
 
-      {/* Advanced Options Toggle - Retro Style */}
-      <TouchableOpacity
-        onPress={() => setShowAdvanced(!showAdvanced)}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: theme.card,
-          borderWidth: 3,
-          borderColor: theme.border,
-          padding: 14,
-          marginBottom: 20,
-        }}
-      >
-        <Image 
-          source={require('../assets/images/setting.png')} 
-          style={{ width: 20, height: 20 }}
-          resizeMode="contain"
-        />
-        <Text style={{ 
-          fontSize: 14, 
-          fontFamily: 'PressStart2P-Regular',
-          color: theme.text, 
-          marginLeft: 12, 
-          flex: 1 
-        }}>
-          CUSTOM OPTIONS
-        </Text>
-        <MaterialIcons 
-          name={showAdvanced ? "expand-less" : "expand-more"} 
-          size={24} 
-          color={theme.subtext} 
-        />
-      </TouchableOpacity>
+      {/* Advanced Options Toggle - Retro Style - Only show for non-timeless bets */}
+      {betType !== 'timeless' && (
+        <TouchableOpacity
+          onPress={() => setShowAdvanced(!showAdvanced)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.card,
+            borderWidth: 3,
+            borderColor: theme.border,
+            padding: 14,
+            marginBottom: 20,
+          }}
+        >
+          <Image 
+            source={require('../assets/images/setting.png')} 
+            style={{ width: 20, height: 20 }}
+            resizeMode="contain"
+          />
+          <Text style={{ 
+            fontSize: 14, 
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.text, 
+            marginLeft: 12, 
+            flex: 1 
+          }}>
+            CUSTOM OPTIONS
+          </Text>
+          <MaterialIcons 
+            name={showAdvanced ? "expand-less" : "expand-more"} 
+            size={24} 
+            color={theme.subtext} 
+          />
+        </TouchableOpacity>
+      )}
 
       {/* Advanced Options */}
       {showAdvanced && (
@@ -690,4 +696,4 @@ export default function CreateBetScreen() {
       />
     </ScrollView>
   );
-} 
+}  

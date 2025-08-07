@@ -198,20 +198,7 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition, onPosi
       elevation: 3,
     }}>
 
-      {/* Generated Image Display */}
-      {bet.generatedImage && (
-        <View style={{ marginBottom: 12 }}>
-          <Image 
-            source={{ uri: bet.generatedImage }} 
-            style={{ 
-              width: '100%', 
-              height: 120, 
-              borderRadius: 8,
-            }} 
-            resizeMode="cover"
-          />
-        </View>
-      )}
+
 
       {/* Question */}
       <Text style={{
@@ -2041,7 +2028,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           color: theme.green,
           marginBottom: 8,
         }}>
-          ✓ PHANTOM CONNECTED
+          ✓ WALLET CONNECTED
         </Text>
         <Text style={{
           fontSize: 10,
@@ -2067,7 +2054,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           color: theme.orange,
           marginBottom: 8,
         }}>
-          PHANTOM NOT CONNECTED
+          WALLET NOT CONNECTED
         </Text>
         <Text style={{
           fontSize: 10,
@@ -2177,7 +2164,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
           }}>
             {phantomWalletPublicKey ? 
               `TRANSFER ${addFundsAmount || '0'} SOL` : 
-              'CONNECT PHANTOM'}
+              'CONNECT WALLET'}
           </Text>
         )}
       </TouchableOpacity>

@@ -77,7 +77,7 @@ export default function LiveBetsScreen() {
 
   const theme = getTheme();
 
-  // Filter out expired bets
+  // Separate active and ended bets
   const activeBets = bets.filter(bet => {
     // Keep timeless bets (they don't expire)
     if (bet.betType === 'timeless') return true;
@@ -88,6 +88,26 @@ export default function LiveBetsScreen() {
     const now = new Date();
     const endTime = new Date(bet.endTime);
     return now < endTime; // Only keep bets that haven't ended yet
+  });
+
+  const endedBets = bets.filter(bet => {
+    // Skip timeless bets (they don't end)
+    if (bet.betType === 'timeless') return false;
+    
+    // For other bet types, check if they're expired
+    if (!bet.endTime) return false; // Skip bets without end time
+    
+    const now = new Date();
+    const endTime = new Date(bet.endTime);
+    return now >= endTime; // Only keep bets that have ended
+  });
+
+  // Combine active bets first, then ended bets, and sort by creation date (recent first)
+  const allBets = [...activeBets, ...endedBets].sort((a, b) => {
+    // Sort by creation date (recently published first)
+    const aDate = new Date(a.createdAt || 0);
+    const bDate = new Date(b.createdAt || 0);
+    return bDate.getTime() - aDate.getTime(); // Most recent first
   });
 
   // Bets are now fetched from the BetsContext
@@ -204,6 +224,7 @@ export default function LiveBetsScreen() {
     const { wallets } = useEmbeddedSolanaWallet();
     const isExpired = bet.betType !== 'timeless' && new Date(bet.endTime || '') <= new Date();
     const [generatedImage, setGeneratedImage] = useState<string>('');
+  
     
     // Generate image using pollinations.ai API
     const generateImage = async () => {
@@ -214,7 +235,8 @@ export default function LiveBetsScreen() {
       try {
         const prompt = `${bet.question} ${bet.options[0]} vs ${bet.options[1]}`;
         const encodedPrompt = encodeURIComponent(prompt);
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
+        // Optimize image URL with smaller dimensions and faster loading
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=400&height=300&quality=80&fast=true`;
         setGeneratedImage(imageUrl);
       } catch (error) {
         console.error('Error generating image:', error);
@@ -611,7 +633,8 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
               borderWidth: 2,
               borderColor: theme.primary,
               borderRadius: 12,
-              overflow: 'hidden'
+              overflow: 'hidden',
+              backgroundColor: theme.card,
             }}>
               <Image 
                 source={{ uri: generatedImage }} 
@@ -621,6 +644,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                   borderRadius: 10,
                 }} 
                 resizeMode="cover"
+                fadeDuration={0}
               />
             </View>
           )}
@@ -968,21 +992,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
                 backgroundColor="#00ff00"
               />
             </View>
-           ) : (
-             <View style={{
-               position: 'absolute',
-               bottom: 200,
-               left: 18,
-              flexDirection: 'row',
-              alignItems: 'center',
-              zIndex: 10
-            }}>
-              <Ionicons name="infinite-outline" size={24} color={theme.primary} />
-                           <Text style={{ fontSize: 14, fontWeight: 'bold', color: theme.primary, marginLeft: 4, fontFamily: 'PressStart2P-Regular' }}>
-                TIMELESS
-              </Text>
-            </View>
-           )}
+           ) : null}
         </View>
       </View>
     );
@@ -1010,7 +1020,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
       {/* Fixed Header */}
 
       {/* Instagram-style Vertical Reel */}
-      {activeBets.length === 0 ? (
+      {allBets.length === 0 ? (
         <View style={{
           flex: 1,
           justifyContent: 'center',
@@ -1039,7 +1049,7 @@ const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: stri
       ) : (
         <FlatList
           ref={flatListRef}
-          data={activeBets}
+          data={allBets}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ flexGrow: 1 }}
           renderItem={({ item, index }) => (

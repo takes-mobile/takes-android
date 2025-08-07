@@ -478,35 +478,7 @@ export default function LoginScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Theme toggle button */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          top: 40,
-          right: 20,
-          zIndex: 100,
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          backgroundColor: 'transparent',
-          borderWidth: 2,
-          borderColor: themeName === 'dark' ? '#4ed620' : '#333',
-          justifyContent: 'center',
-          alignItems: 'center',
-          shadowColor: themeName === 'dark' ? '#4ed620' : '#000',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.3,
-          shadowRadius: 5,
-          elevation: 5,
-        }}
-        onPress={toggleTheme}
-      >
-        <MaterialIcons 
-          name={themeName === 'dark' ? 'light-mode' : 'dark-mode'} 
-          size={24} 
-          color={themeName === 'dark' ? '#fff' : '#000'} 
-        />
-      </TouchableOpacity>
+
       
       {/* Background Gradient */}
       <LinearGradient
