@@ -1,5 +1,6 @@
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import BottomNav from '../components/BottomNav';
+import WalletBottomNav from '../components/WalletBottomNav';
 import { usePrivy, PrivyProvider } from '@privy-io/expo';
 import Constants from 'expo-constants';
 import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
@@ -8,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from 'react-native-toast-message';
 import { useFonts } from 'expo-font';
 import { BetsProvider } from '../context/BetsContext';
+import { useWalletConnection } from '../hooks/useWalletConnection';
 
 export const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} });
 
@@ -96,7 +98,10 @@ function ThemeProvider({ children }: { children: ReactNode }) {
 
 function LayoutWithNav() {
   const { user } = usePrivy();
+  const { connected: walletConnected } = useWalletConnection();
   const { theme: themeName } = useContext(ThemeContext);
+  const pathname = usePathname();
+  const isLoginScreen = pathname === '/' && !user && !walletConnected;
   
   const lightTheme = {
     background: '#fff',
@@ -137,8 +142,10 @@ function LayoutWithNav() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="create-bet" options={{ headerShown: false }} />
         <Stack.Screen name="live-bets" options={{ headerShown: false }} />
+        <Stack.Screen name="wallet-user" options={{ headerShown: false }} />
+        <Stack.Screen name="wallet-status" options={{ headerShown: false }} />
       </Stack>
-      {user && <BottomNav />}
+      {isLoginScreen ? null : (walletConnected ? <WalletBottomNav /> : (user ? <BottomNav /> : null))}
       <Toast />
     </>
   );

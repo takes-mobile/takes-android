@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import RetroButton from './RetroButton';
 import { WalletConnectButton } from './WalletConnectButton';
 import { useWalletConnection } from '../hooks/useWalletConnection';
+// import WalletBottomNav from './WalletBottomNav';
 
 // Simple Glow Button component
 const PulsatingGlowButton = ({ 
@@ -418,10 +419,7 @@ export default function LoginScreen() {
   // Redirect to wallet user screen when wallet is connected
   useEffect(() => {
     if (walletConnected && walletAddress) {
-      // Add a small delay to show the connection success, then redirect
-      setTimeout(() => {
-        router.push('/');
-      }, 1500);
+      router.replace('/wallet-user');
     }
   }, [walletConnected, walletAddress, router]);
 
@@ -542,6 +540,7 @@ export default function LoginScreen() {
           justifyContent: 'center',
           alignItems: 'center',
           paddingHorizontal: 32,
+          paddingBottom: walletConnected ? 120 : 32,
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
         }}
@@ -594,8 +593,17 @@ export default function LoginScreen() {
           glowColor="#4ed620"
         />
 
-        {/* Wallet Connect Button */}
-       
+        {/* Go to Wallet button when connected */}
+        {walletConnected && (
+          <View style={{ marginTop: 20 }}>
+            <PulsatingGlowButton 
+              onPress={() => router.push('/wallet-user')}
+              title="GO TO WALLET"
+              backgroundColor="#8b5cf6"
+              glowColor="#8b5cf6"
+            />
+          </View>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -791,6 +799,7 @@ export default function LoginScreen() {
           </Text>
         </Animated.View>
       </Modal>
+      {/* No bottom nav on login screen */}
     </View>
   );
 }

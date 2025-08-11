@@ -204,7 +204,7 @@ export const WalletUserScreen = () => {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Profile Header */}
         <View style={{
           backgroundColor: theme.card,
@@ -396,7 +396,7 @@ export const WalletUserScreen = () => {
       </View>
       
       {/* Tab Content */}
-      <View style={{ marginTop: 18, marginBottom: 60 }}>
+      <View style={{ marginTop: 18 }}>
         {loadingBets ? (
           <View style={{ backgroundColor: theme.card, borderRadius: 16, marginHorizontal: 18, padding: 18, borderWidth: 2, borderColor: theme.border, alignItems: 'center' }}>
             <ActivityIndicator color={theme.green} />

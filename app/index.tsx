@@ -5,9 +5,11 @@ import { usePrivy } from "@privy-io/expo";
 import { UserScreen } from "@/components/UserScreen";
 import { useContext } from "react";
 import { ThemeContext } from "./_layout";
+import { useWalletConnection } from "@/hooks/useWalletConnection";
 
 export default function Index() {
   const { user } = usePrivy();
+  const { connected: walletConnected } = useWalletConnection();
   const { theme: themeName } = useContext(ThemeContext);
   
   const lightTheme = {
@@ -58,5 +60,6 @@ export default function Index() {
       </SafeAreaView>
     );
   }
+  // Do not render wallet user screen here; redirect happens from LoginScreen
   return !user ? <LoginScreen /> : <UserScreen />;
 }
