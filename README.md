@@ -1,6 +1,6 @@
 # TAKES app setup guide 
 
-npm install  
+yarn install  
 
 npx eas build --profile development --platform android
 
