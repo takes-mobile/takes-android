@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, Dimensions, RefreshControl, FlatList, Animated, StatusBar, Platform, ActivityIndicator, Modal, TextInput, Alert, Image } from 'react-native';
+import { View, Text as RNText, TouchableOpacity, Dimensions, RefreshControl, FlatList, Animated, StatusBar, Platform, ActivityIndicator, Modal, TextInput, Alert, Image } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useContext, useEffect, useState, useRef } from 'react';
 import { ThemeContext } from './_layout';
@@ -13,6 +13,11 @@ import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Local Text wrapper to enforce app font on this screen
+const Text = (props: React.ComponentProps<typeof RNText>) => (
+  <RNText {...props} style={[{ fontFamily: 'PressStart2P-Regular' }, props.style]} />
+);
 
 // Using Bet interface from BetsContext
 

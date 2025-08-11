@@ -11,7 +11,8 @@ import {
   Pressable, 
   Animated,
   StyleSheet,
-  Image
+  Image,
+  TextInput
 } from "react-native";
 import { MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -39,6 +40,12 @@ export const WalletUserScreen = () => {
   const [endingPosition, setEndingPosition] = useState<string | null>(null);
   const [showDisconnectAlert, setShowDisconnectAlert] = useState(false);
   const [showCopyAlert, setShowCopyAlert] = useState(false);
+  const [showAddFundsModal, setShowAddFundsModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [addFundsAmount, setAddFundsAmount] = useState<string>("");
+  const [withdrawToken, setWithdrawToken] = useState<'SOL' | 'BONK'>("SOL");
+  const [sendAddress, setSendAddress] = useState<string>("");
+  const [sendAmount, setSendAmount] = useState<string>("");
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -349,7 +356,7 @@ export const WalletUserScreen = () => {
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18, marginBottom: 8, paddingHorizontal: 18 }}>
         <RetroButton
           title="ADD"
-          onPress={() => router.push('/wallet-status')}
+          onPress={() => setShowAddFundsModal(true)}
           backgroundColor="#4ed620" // Match the login button color
           textColor="#000000"
           fontSize={14}
@@ -361,7 +368,7 @@ export const WalletUserScreen = () => {
         />
         <RetroButton
           title="WITHDRAW"
-          onPress={() => router.push('/wallet-status')}
+          onPress={() => setShowWithdrawModal(true)}
           backgroundColor="#F97316" // Orange for withdraw
           textColor="#000000"
           fontSize={14}
@@ -584,6 +591,350 @@ export const WalletUserScreen = () => {
            
           </View>
         </Animated.View>
+      </Modal>
+
+      {/* Add Funds Modal */}
+      <Modal
+        visible={showAddFundsModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddFundsModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={() => setShowAddFundsModal(false)}
+        />
+        <View style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: theme.modal,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          padding: 28,
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 20,
+          elevation: 20,
+        }}>
+          <View style={{
+            width: 40,
+            height: 4,
+            backgroundColor: theme.subtext,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginBottom: 24,
+          }} />
+
+          <Text style={{
+            fontSize: 18,
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.green,
+            marginBottom: 24,
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            ADD FUNDS
+          </Text>
+
+          {/* Connection Status */}
+          <View style={{
+            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 24,
+            borderWidth: 1,
+            borderColor: theme.green + '40',
+            alignItems: 'center',
+          }}>
+            <Text style={{
+              fontSize: 12,
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.green,
+              marginBottom: 8,
+            }}>
+              ✓ WALLET CONNECTED
+            </Text>
+            <Text style={{
+              fontSize: 10,
+              fontFamily: 'PressStart2P-Regular',
+              color: theme.subtext,
+            }}>
+              {address ? `${address.slice(0, 8)}...${address.slice(-8)}` : ''}
+            </Text>
+          </View>
+
+          <Text style={{
+            color: theme.text,
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16,
+            textAlign: 'center',
+          }}>
+            ENTER AMOUNT (SOL):
+          </Text>
+
+          <TextInput
+            style={{
+              width: '100%',
+              borderWidth: 3,
+              borderColor: theme.green,
+              borderRadius: 16,
+              padding: 14,
+              marginBottom: 24,
+              fontSize: 16,
+              backgroundColor: theme.input,
+              fontWeight: 'bold',
+              color: theme.text,
+              fontFamily: 'PressStart2P-Regular',
+            }}
+            placeholder="0.1"
+            value={addFundsAmount}
+            onChangeText={setAddFundsAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor={theme.placeholder}
+          />
+
+          {/* Quick Amount Buttons */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 24 }}>
+            {['0.1', '0.5', '1.0'].map((quickAmount) => (
+              <TouchableOpacity
+                key={quickAmount}
+                style={{
+                  backgroundColor: theme.input,
+                  borderRadius: 12,
+                  padding: 12,
+                  borderWidth: 2,
+                  borderColor: theme.border,
+                  minWidth: 60,
+                  alignItems: 'center',
+                }}
+                onPress={() => setAddFundsAmount(quickAmount)}
+              >
+                <Text style={{
+                  color: theme.text,
+                  fontSize: 12,
+                  fontFamily: 'PressStart2P-Regular',
+                }}>
+                  {quickAmount}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <View style={{ gap: 12 }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#4ed620',
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: theme.border,
+              }}
+              onPress={() => {
+                setShowAddFundsModal(false);
+                router.push('/wallet-status');
+              }}
+            >
+              <Text style={{
+                color: '#000',
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                ADD VIA WALLET
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                backgroundColor: theme.input,
+                borderRadius: 12,
+                padding: 16,
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: theme.border,
+              }}
+              onPress={() => {
+                setShowAddFundsModal(false);
+                setAddFundsAmount('');
+              }}
+            >
+              <Text style={{
+                color: theme.text,
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                CANCEL
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Withdraw Modal */}
+      <Modal
+        visible={showWithdrawModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowWithdrawModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' }}
+          onPress={() => setShowWithdrawModal(false)}
+        />
+        <View style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: theme.modal,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
+          padding: 28,
+          shadowColor: theme.shadow,
+          shadowOffset: { width: 0, height: -10 },
+          shadowOpacity: 0.3,
+          shadowRadius: 20,
+          elevation: 20,
+        }}>
+          <View style={{
+            width: 40,
+            height: 4,
+            backgroundColor: theme.subtext,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginBottom: 24,
+          }} />
+
+          <Text style={{
+            fontSize: 18,
+            fontFamily: 'PressStart2P-Regular',
+            color: theme.orange,
+            marginBottom: 24,
+            textAlign: 'center',
+            textShadowColor: 'rgba(0,0,0,0.7)',
+            textShadowOffset: { width: 1, height: 1 },
+            textShadowRadius: 0,
+          }}>
+            WITHDRAW FUNDS
+          </Text>
+
+          <Text style={{
+            color: theme.text,
+            fontSize: 12,
+            fontFamily: 'PressStart2P-Regular',
+            marginBottom: 16,
+            textAlign: 'center',
+          }}>
+            SELECT TOKEN:
+          </Text>
+
+          <View style={{ flexDirection: 'row', marginBottom: 24 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: withdrawToken === 'SOL' ? theme.green : theme.input,
+                borderRadius: 12,
+                padding: 12,
+                marginRight: 8,
+                borderWidth: 2,
+                borderColor: withdrawToken === 'SOL' ? theme.green : theme.border,
+                alignItems: 'center',
+              }}
+              onPress={() => setWithdrawToken('SOL')}
+            >
+              <Text style={{
+                color: withdrawToken === 'SOL' ? '#fff' : theme.text,
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                SOL
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                backgroundColor: withdrawToken === 'BONK' ? theme.orange : theme.input,
+                borderRadius: 12,
+                padding: 12,
+                marginLeft: 8,
+                borderWidth: 2,
+                borderColor: withdrawToken === 'BONK' ? theme.orange : theme.border,
+                alignItems: 'center',
+              }}
+              onPress={() => setWithdrawToken('BONK')}
+            >
+              <Text style={{
+                color: withdrawToken === 'BONK' ? '#fff' : theme.text,
+                fontSize: 14,
+                fontFamily: 'PressStart2P-Regular',
+                fontWeight: 'bold',
+              }}>
+                BONK
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TextInput
+            style={{ width: '100%', borderWidth: 3, borderColor: theme.green, borderRadius: 16, padding: 14, marginBottom: 16, fontSize: 16, backgroundColor: theme.input, fontWeight: 'bold', color: theme.text }}
+            placeholder="Recipient Address"
+            value={sendAddress}
+            onChangeText={setSendAddress}
+            autoCapitalize="none"
+            placeholderTextColor={theme.placeholder}
+          />
+          <TextInput
+            style={{ width: '100%', borderWidth: 3, borderColor: theme.green, borderRadius: 16, padding: 14, marginBottom: 16, fontSize: 16, backgroundColor: theme.input, fontWeight: 'bold', color: theme.text }}
+            placeholder={`Amount (${withdrawToken})`}
+            value={sendAmount}
+            onChangeText={setSendAmount}
+            keyboardType="decimal-pad"
+            placeholderTextColor={theme.placeholder}
+          />
+
+          <View style={{ flexDirection: 'row', gap: 16, marginTop: 10, justifyContent: 'center' }}>
+            <RetroButton
+              title="WITHDRAW"
+              backgroundColor="#4ed620"
+              textColor="#000000"
+              fontSize={12}
+              letterSpacing={0}
+              fontWeight="normal"
+              minHeight={40}
+              minWidth={120}
+              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+              onPress={() => {
+                setShowWithdrawModal(false);
+                router.push('/wallet-status');
+              }}
+            />
+            <RetroButton
+              title="CANCEL"
+              backgroundColor="#FFFFFF"
+              textColor="#000000"
+              fontSize={12}
+              letterSpacing={0}
+              fontWeight="normal"
+              minHeight={40}
+              minWidth={120}
+              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+              onPress={() => {
+                setShowWithdrawModal(false);
+                setSendAddress('');
+                setSendAmount('');
+              }}
+            />
+          </View>
+        </View>
       </Modal>
 
       {/* Themed Alerts */}

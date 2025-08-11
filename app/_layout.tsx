@@ -10,6 +10,7 @@ import Toast from 'react-native-toast-message';
 import { useFonts } from 'expo-font';
 import { BetsProvider } from '../context/BetsContext';
 import { useWalletConnection } from '../hooks/useWalletConnection';
+import * as walletSession from '../utils/walletSession';
 
 export const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} });
 
@@ -101,7 +102,25 @@ function LayoutWithNav() {
   const { connected: walletConnected } = useWalletConnection();
   const { theme: themeName } = useContext(ThemeContext);
   const pathname = usePathname();
-  const isLoginScreen = pathname === '/' && !user && !walletConnected;
+  const [walletSessionConnected, setWalletSessionConnected] = useState(false);
+  const isWalletActive = walletConnected || walletSessionConnected;
+  // Treat '/' with no Privy user as the login screen regardless of wallet session
+  const isLoginScreen = pathname === '/' && !user;
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkSession = async () => {
+      try {
+        const valid = await walletSession.isSessionValid();
+        if (isMounted) setWalletSessionConnected(!!valid);
+      } catch {}
+    };
+    checkSession();
+    // Re-check on route changes
+    return () => {
+      isMounted = false;
+    };
+  }, [pathname]);
   
   const lightTheme = {
     background: '#fff',
@@ -145,7 +164,7 @@ function LayoutWithNav() {
         <Stack.Screen name="wallet-user" options={{ headerShown: false }} />
         <Stack.Screen name="wallet-status" options={{ headerShown: false }} />
       </Stack>
-      {isLoginScreen ? null : (walletConnected ? <WalletBottomNav /> : (user ? <BottomNav /> : null))}
+      {isLoginScreen ? null : (isWalletActive ? <WalletBottomNav /> : (user ? <BottomNav /> : null))}
       <Toast />
     </>
   );
