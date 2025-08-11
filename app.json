@@ -16,7 +16,9 @@
       "usesAppleSignIn": true,
       "supportsTablet": true,
       "bundleIdentifier": "dev.privy.example",
-      "associatedDomains": ["webcredentials:your.real.domain.com"],
+      "associatedDomains": [
+        "webcredentials:your.real.domain.com"
+      ],
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -24,7 +26,9 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "takes-app",
-            "CFBundleURLSchemes": ["takes-app"]
+            "CFBundleURLSchemes": [
+              "takes-app"
+            ]
           }
         ]
       }
@@ -51,14 +55,21 @@
               "scheme": "takes-app"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "extra": {
       "privyAppId": "cmdfmgl76001qlh0mi0ggzx5l",
       "privyClientId": "client-WY6NvgKMnByoyauWRNvgPku7dBs3VtJeYxseJm48kDUtk",
-      "passkeyAssociatedDomain": "https://your.real.domain.com"
+      "passkeyAssociatedDomain": "https://your.real.domain.com",
+      "router": {},
+      "eas": {
+        "projectId": "61963352-b500-4c44-95ea-c3d0ca023713"
+      }
     },
     "plugins": [
       "expo-router",

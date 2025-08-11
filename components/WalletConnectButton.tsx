@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { ThemedText } from '../components/ThemedText';
+import { ThemedText } from './ThemedText';
 import { useColorScheme } from '../hooks/useColorScheme';
 import { Colors } from '../constants/Colors';
 import RetroButton from './RetroButton';

@@ -1,14 +1,17 @@
-import { Text, View, Modal, Pressable, Platform, Animated, Dimensions, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { Text, View, Modal, Pressable, Platform, Animated, Dimensions, StyleSheet, Image, TouchableOpacity, Alert } from "react-native";
 import { MaterialIcons } from '@expo/vector-icons';
 import { LoginWithOAuthInput, useLoginWithOAuth } from "@privy-io/expo";
 import { useLogin } from "@privy-io/expo/ui";
 import { useLoginWithPasskey } from "@privy-io/expo/passkey";
+import { useRouter } from 'expo-router';
 
 import { useState, useContext, useEffect, useRef } from "react";
 
 import { ThemeContext } from '../app/_layout';
 import { LinearGradient } from 'expo-linear-gradient';
 import RetroButton from './RetroButton';
+import { WalletConnectButton } from './WalletConnectButton';
+import { useWalletConnection } from '../hooks/useWalletConnection';
 
 // Simple Glow Button component
 const PulsatingGlowButton = ({ 
@@ -89,11 +92,11 @@ const SampleBetPreview = ({ theme }: { theme: any }) => {
         borderColor: 'rgba(255,255,255,1)', // changed from black to white
       }}>
         <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
-          "What is the meaning of life?"
+          "Who would win gorilla vs. 100 men?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Love: 42%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 12 }}>Purpose: 58%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>Yes: 65%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>No: 35%</Text>
         </View>
       </View>
     </Animated.View>
@@ -139,29 +142,12 @@ const TopSampleBetPreview = ({ theme }: { theme: any }) => {
         borderWidth: 1,
         borderColor: 'rgba(139,92,246,0.2)',
       }}>
-        <Text style={{ 
-          color: theme.text, 
-          fontSize: 14, 
-          fontWeight: '600', 
-          marginBottom: 8,
-          fontFamily: 'System',
-          letterSpacing: 0.5,
-        }}>
-          "Is pineapple on pizza acceptable?"
+        <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600', marginBottom: 8 }}>
+          "Who will win the Super Bowl?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ 
-            color: theme.subtext, 
-            fontSize: 12,
-            fontFamily: 'System',
-            fontWeight: '500',
-          }}>Yes: 48%</Text>
-          <Text style={{ 
-            color: theme.subtext, 
-            fontSize: 12,
-            fontFamily: 'System',
-            fontWeight: '500',
-          }}>No: 52%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team A: 45%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 12 }}>Team B: 55%</Text>
         </View>
       </View>
     </Animated.View>
@@ -208,11 +194,11 @@ const MiddleSampleBetPreview = ({ theme }: { theme: any }) => {
         borderColor: 'rgba(34,197,94,0.2)',
       }}>
         <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
-          "Should cats be allowed to vote?"
+          "Will Apple stock go up today?"
         </Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>Yes: 67%</Text>
-          <Text style={{ color: theme.subtext, fontSize: 11 }}>No: 33%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 11 }}>Yes: 72%</Text>
+          <Text style={{ color: theme.subtext, fontSize: 11 }}>No: 28%</Text>
         </View>
       </View>
     </Animated.View>
@@ -372,6 +358,7 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const { theme: themeName, toggleTheme } = useContext(ThemeContext);
+  const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
@@ -418,6 +405,25 @@ export default function LoginScreen() {
       setError(JSON.stringify(err.message));
     },
   });
+
+  // Wallet connection hook
+  const {
+    connected: walletConnected,
+    connecting: walletConnecting,
+    address: walletAddress,
+    connectWallet,
+    disconnectWallet,
+  } = useWalletConnection();
+
+  // Redirect to wallet user screen when wallet is connected
+  useEffect(() => {
+    if (walletConnected && walletAddress) {
+      // Add a small delay to show the connection success, then redirect
+      setTimeout(() => {
+        router.push('/');
+      }, 1500);
+    }
+  }, [walletConnected, walletAddress, router]);
 
   useEffect(() => {
     Animated.parallel([
@@ -478,7 +484,35 @@ export default function LoginScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-
+      {/* Theme toggle button */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          top: 40,
+          right: 20,
+          zIndex: 100,
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderColor: themeName === 'dark' ? '#4ed620' : '#333',
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: themeName === 'dark' ? '#4ed620' : '#000',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.3,
+          shadowRadius: 5,
+          elevation: 5,
+        }}
+        onPress={toggleTheme}
+      >
+        <MaterialIcons 
+          name={themeName === 'dark' ? 'light-mode' : 'dark-mode'} 
+          size={24} 
+          color={themeName === 'dark' ? '#fff' : '#000'} 
+        />
+      </TouchableOpacity>
       
       {/* Background Gradient */}
       <LinearGradient
@@ -514,30 +548,19 @@ export default function LoginScreen() {
       >
         {/* Logo and Tagline */}
         <View style={{ alignItems: 'center', marginBottom: 60 }}>
-          <View style={{
-            shadowColor: themeName === 'dark' ? 'rgba(34, 197, 94, 0.4)' : 'rgba(34, 197, 94, 0.3)',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: themeName === 'dark' ? 0.6 : 0.4,
-            shadowRadius: 20,
-            elevation: 15,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 20,
-            overflow: 'hidden',
-          }}>
-            <Image 
-              source={require('../assets/images/mainlogo.png')}
-              style={{
-                width: 400,
-                height: 150,
-                resizeMode: 'contain',
-                marginBottom: 2,
-                transform: [{ rotate: '0deg' }],
-              }}
-            />
-          </View>
+          {/* Removed glow/shadow behind the logo */}
+          <Image 
+            source={require('../assets/images/mainlogo.png')}
+            style={{
+              width: 400,
+              height: 150,
+              resizeMode: 'contain',
+              marginBottom: 2,
+              transform: [{ rotate: '0deg' }],
+            }}
+          />
         
-                              <View style={{ alignItems: 'center', marginTop: 10 }}>
+          <View style={{ alignItems: 'center', marginTop: 10 }}>
             <Text style={{ 
                 fontSize: 14, 
                 color: 'rgba(255,255,255,0.5)', 
@@ -570,6 +593,9 @@ export default function LoginScreen() {
           backgroundColor="#4ed620"
           glowColor="#4ed620"
         />
+
+        {/* Wallet Connect Button */}
+       
 
         {/* Error Message */}
         {error && (
@@ -727,25 +753,22 @@ export default function LoginScreen() {
               }} />
             </View>
 
-            {/* Google Button */}
-            <RetroButton
-              title="Connect Wallet"
-              backgroundColor="#a259f7"
-              textColor="#fff"
-              textShadowColor="#000"
-              fontSize={12}
-              letterSpacing={0}
-              fontWeight="normal"
-              minHeight={56}
-              minWidth={200}
-              textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-              onPress={() => {
-                closeModal();
-                oauth.login({ provider: 'google' } as LoginWithOAuthInput);
-              }}
-            >
-              
-            </RetroButton>
+            {/* Wallet Connect Button replaces Google Button */}
+            <View style={{ alignItems: 'center' }}>
+              <WalletConnectButton
+                connected={walletConnected}
+                connecting={walletConnecting}
+                onConnect={() => {
+                  closeModal();
+                  connectWallet();
+                }}
+                onDisconnect={disconnectWallet}
+                address={walletAddress}
+                variant="primary"
+                size="large"
+                showAddress={true}
+              />
+            </View>
           </View>
 
           {/* Terms of Service and Privacy Policy moved here */}
