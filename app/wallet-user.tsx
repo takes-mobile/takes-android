@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { WalletUserScreen } from '../components/WalletUserScreen';
+import { UserScreen } from '../components/UserScreen';
 
 export default function WalletUserRoute() {
   return (
     <View style={styles.container}>
-      <WalletUserScreen />
+      <UserScreen />
     </View>
   );
 }

@@ -8,7 +8,7 @@ import { Connection, Transaction , Keypair} from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { RetroPopup } from '../components/RetroPopup';
-
+import { useWalletConnection } from '../hooks/useWalletConnection';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Animated VS Component
@@ -120,6 +120,12 @@ export default function PreviewBetScreen() {
   const { description, answers, duration, amount, generatedImage, betType } = useLocalSearchParams();
   const { theme: themeName } = useContext(ThemeContext);
   const { wallets } = useEmbeddedSolanaWallet();
+const { 
+  connected: mwaConnected, 
+  address: mwaAddress, 
+  publicKey: mwaPublicKey, // Add this
+  executeTransaction 
+} = useWalletConnection();
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -225,75 +231,99 @@ export default function PreviewBetScreen() {
   const handlePublishBet = async () => {
     try {
       setIsPublishing(true);
-
-      // Check if wallet is available
-      if (!wallets || wallets.length === 0) {
-        showPopup('Error', 'No wallet found. Please connect your wallet first.', 'error');
-        return;
+  
+      // Debug wallet states
+      console.log('Privy wallets:', wallets?.length || 0);
+      console.log('MWA connected:', mwaConnected);
+      console.log('MWA address:', mwaAddress);
+      console.log('MWA publicKey:', mwaPublicKey?.toBase58());
+  
+      // Check wallet availability - Privy first, then MWA
+      let userWallet: string | null = null;
+      let walletProvider: any = null;
+      let walletType: 'privy' | 'mwa' | null = null;
+  
+      // First check if Privy wallet is connected
+      if (wallets && wallets.length > 0) {
+        const privyWallet = wallets[0];
+        if (privyWallet.address) {
+          userWallet = privyWallet.address;
+          walletProvider = await privyWallet.getProvider();
+          walletType = 'privy';
+          console.log('Using Privy wallet:', userWallet);
+        }
       }
-
-      const wallet = wallets[0];
-      const provider = await wallet.getProvider();
-
-      // Get user wallet address
-      const userWallet = wallet.address;
-
+  
+      // If no Privy wallet, check MWA wallet
+      if (!userWallet && mwaConnected && mwaAddress) {
+        userWallet = mwaAddress;
+        walletType = 'mwa';
+        console.log('Using MWA wallet:', userWallet);
+      }
+  
+      console.log('Final wallet selection:', { userWallet, walletType });
+  
       if (!userWallet) {
-        showPopup('Error', 'Unable to get wallet address.', 'error');
+        showPopup(
+          'Error',
+          `Please connect a wallet to create a bet.\n` +
+          `Privy connected: ${wallets && wallets.length > 0 ? 'Yes' : 'No'}\n` +
+          `MWA connected: ${mwaConnected ? 'Yes' : 'No'}`,
+          'error'
+        );
         return;
       }
-
-
-
+  
       // Create tokens for both options
       const tokens = [];
+      const processedSignatures = []; // Track successful transactions
       
       for (let i = 0; i < Math.min(answersArr.length, 2); i++) {
         // Generate keypair for each token
         console.log(`Generating keypair for option ${i + 1}...`);
-      const keypairResponse = await fetch('https://apipoolc.vercel.app/api/keypair');
-      
-      if (!keypairResponse.ok) {
+        const keypairResponse = await fetch('https://apipoolc.vercel.app/api/keypair');
+        
+        if (!keypairResponse.ok) {
           throw new Error(`Keypair generation failed for option ${i + 1}: ${keypairResponse.status}`);
-      }
-
-      const keypairData = await keypairResponse.json();
-      
-      if (!keypairData.success || !keypairData.publicKey) {
+        }
+  
+        const keypairData = await keypairResponse.json();
+        
+        if (!keypairData.success || !keypairData.publicKey) {
           throw new Error(`Failed to generate keypair for option ${i + 1}`);
-      }
-
+        }
+  
         console.log(`Keypair generated for option ${i + 1}:`, keypairData.publicKey);
-
+  
         // Prepare API parameters for this token
         const tokenName = createTokenName(i);
         const tokenSymbol = createTokenSymbol(i);
-      const mint = keypairData.publicKey;
-
+        const mint = keypairData.publicKey;
+  
         console.log(`Creating token ${i + 1} with params:`, {
-        tokenName,
-        tokenSymbol,
-        mint,
-        userWallet
-      });
-
+          tokenName,
+          tokenSymbol,
+          mint,
+          userWallet
+        });
+  
         // Call the create API for this token
-      const createResponse = await fetch(
-        `https://apipoolc.vercel.app/api/create?tokenName=${encodeURIComponent(tokenName)}&tokenSymbol=${encodeURIComponent(tokenSymbol)}&mint=${mint}&userWallet=${userWallet}`
-      );
-
-      if (!createResponse.ok) {
+        const createResponse = await fetch(
+          `https://apipoolc.vercel.app/api/create?tokenName=${encodeURIComponent(tokenName)}&tokenSymbol=${encodeURIComponent(tokenSymbol)}&mint=${mint}&userWallet=${userWallet}`
+        );
+  
+        if (!createResponse.ok) {
           throw new Error(`API call failed for token ${i + 1}: ${createResponse.status}`);
-      }
-
-      const createData = await createResponse.json();
-      
-      if (!createData.success || !createData.poolTx) {
+        }
+  
+        const createData = await createResponse.json();
+        
+        if (!createData.success || !createData.poolTx) {
           throw new Error(`Failed to create token pool for option ${i + 1}`);
-      }
-
+        }
+  
         console.log(`Pool created successfully for option ${i + 1}:`, createData);
-
+  
         // Store the token data
         tokens.push({
           tokenName,
@@ -303,67 +333,104 @@ export default function PreviewBetScreen() {
           keypair: keypairData.keypair
         });
       }
-
-
-
+  
       // Step 3: Process all transactions
       const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
-      const signatures = [];
-
+  
       for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
         console.log(`Processing transaction for ${token.tokenName}...`);
-
-        // Decode and prepare the transaction
-        const transaction = Transaction.from(Buffer.from(token.poolTx, 'base64'));
-
-        console.log(`Processing transaction for ${token.tokenName}...`);
-
-        // Get a fresh blockhash and update the transaction
-        console.log('Getting fresh blockhash...');
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      transaction.recentBlockhash = blockhash;
-      transaction.lastValidBlockHeight = lastValidBlockHeight;
-
-      console.log('Signing transaction...');
-
-        // First, sign with the keypair (mint authority)
-        const keyPair = Keypair.fromSecretKey(new Uint8Array(token.keypair.secretKey));
-      
-      // Sign with keypair first
-      transaction.sign(keyPair);
-
-        console.log(`Transaction signed with keypair for ${token.tokenName}`);
-
-        // Then sign with user's wallet using Privy
-      const { signedTransaction } = await provider.request({
-        method: 'signTransaction',
-        params: {
-          transaction: transaction
-        },
-      });
-
-        console.log(`Transaction signed for ${token.tokenName}`);
-
-        // Send the signed transaction
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed'
-      });
-
-        // Wait for confirmation
-      console.log('Waiting for transaction confirmation...');
-      await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight
-      }, 'confirmed');
-      
-        console.log(`Transaction confirmed for ${token.tokenName}:`, signature);
-        signatures.push(signature);
+  
+        try {
+          // Decode and prepare the transaction
+          const transaction = Transaction.from(Buffer.from(token.poolTx, 'base64'));
+  
+          // Get a fresh blockhash and update the transaction
+          console.log('Getting fresh blockhash...');
+          const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+          transaction.recentBlockhash = blockhash;
+          transaction.lastValidBlockHeight = lastValidBlockHeight;
+  
+          console.log('Signing transaction...');
+  
+          // First, sign with the keypair (mint authority)
+          const keyPair = Keypair.fromSecretKey(new Uint8Array(token.keypair.secretKey));
+          transaction.sign(keyPair);
+  
+          console.log(`Transaction signed with keypair for ${token.tokenName}`);
+  
+          let signature: string;
+  
+          if (walletType === 'privy' && walletProvider) {
+            // Use Privy wallet flow
+            const { signedTransaction } = await walletProvider.request({
+              method: 'signTransaction',
+              params: {
+                transaction: transaction
+              },
+            });
+  
+            console.log(`Transaction signed for ${token.tokenName}`);
+  
+            // Send the signed transaction
+            signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+              skipPreflight: false,
+              preflightCommitment: 'confirmed'
+            });
+  
+          } else if (walletType === 'mwa') {
+            // Use MWA wallet flow
+            console.log(`Using MWA wallet to sign transaction for ${token.tokenName}`);
+            
+            // The executeTransaction method will handle signing and sending
+            signature = await executeTransaction(transaction);
+  
+          } else {
+            throw new Error('No valid wallet provider available');
+          }
+  
+          // Wait for confirmation with error handling
+          console.log('Waiting for transaction confirmation...');
+          try {
+            await connection.confirmTransaction({
+              signature,
+              blockhash,
+              lastValidBlockHeight
+            }, 'confirmed');
+            
+            console.log(`Transaction confirmed for ${token.tokenName}:`, signature);
+            processedSignatures.push(signature);
+          } catch (confirmError) {
+            console.warn(`Confirmation failed for ${token.tokenName}, but transaction may have succeeded:`, confirmError);
+            // Still add to processed signatures since transaction was sent
+            processedSignatures.push(signature);
+          }
+  
+        } catch (tokenError) {
+          console.error(`Error processing token ${token.tokenName}:`, tokenError);
+          
+          // Check if the error happened after the transaction was sent
+          if (
+            typeof tokenError === 'object' &&
+            tokenError !== null &&
+            'message' in tokenError &&
+            typeof (tokenError as any).message === 'string' &&
+            (tokenError as any).message.includes('Transaction sent')
+          ) {
+            console.log(`Transaction was sent for ${token.tokenName}, continuing...`);
+            // Extract signature from error message if possible
+            const signatureMatch = (tokenError as any).message.match(/signature: ([A-Za-z0-9]+)/);
+            if (signatureMatch) {
+              processedSignatures.push(signatureMatch[1]);
+            }
+          } else {
+            // If it's a critical error before sending, re-throw
+            throw tokenError;
+          }
+        }
       }
-
-      // Success! Now add the bet to the database
+  
+      // Success! Now add the bet to the database regardless of confirmation issues
       const tokenNames = tokens.map(t => t.tokenName).join(' & ');
       
       // Prepare bet data for database
@@ -374,38 +441,63 @@ export default function PreviewBetScreen() {
         solAmount: parseFloat(Array.isArray(amount) ? amount[0] : amount || '1'),
         duration: currentBetType === 'timeless' ? null : parseInt(Array.isArray(duration) ? duration[0] : duration || '24'),
         userWallet: userWallet,
-        creatorName: "Anonymous", // You can make this configurable later
-        category: "General", // You can make this configurable later
+        creatorName: "Anonymous",
+        category: "General",
         generatedImage: Array.isArray(generatedImage) ? generatedImage[0] : generatedImage,
         betType: currentBetType
       };
-
+  
       console.log('Adding bet to database:', betData);
-
-      // Call the add API to store the bet
-      const addResponse = await fetch('https://apipoolc.vercel.app/api/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(betData),
-      });
-
-      if (!addResponse.ok) {
-        console.warn('Failed to add bet to database, but tokens were created successfully');
-      } else {
+  
+      try {
+        // Call the add API to store the bet
+        const addResponse = await fetch('https://apipoolc.vercel.app/api/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(betData),
+        });
+  
+        if (!addResponse.ok) {
+          console.warn('Failed to add bet to database, but tokens were created successfully');
+          
+          // Show partial success popup
+          showPopup(
+            'Partial Success ⚠️',
+            `Tokens created successfully with ${walletType?.toUpperCase()} wallet!\nTransactions: ${processedSignatures.length}\nDatabase update failed - please contact support.`,
+            'warning',
+            { tokenNames, signatures: processedSignatures },
+            () => router.back()
+          );
+          return;
+        }
+  
         const addData = await addResponse.json();
         console.log('Bet added to database:', addData);
+  
+        // Full success
+        showPopup(
+          'Success! 🎉',
+          `Your bet has been published successfully using ${walletType?.toUpperCase()} wallet!`,
+          'success',
+          { tokenNames, signatures: processedSignatures },
+          () => router.back()
+        );
+  
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        
+        // Show partial success popup
+        showPopup(
+          'Partial Success ⚠️',
+          `Tokens created successfully with ${walletType?.toUpperCase()} wallet!\nTransactions: ${processedSignatures.length}\nDatabase update failed - please contact support.`,
+          'warning',
+          { tokenNames, signatures: processedSignatures },
+          () => router.back()
+        );
       }
-
-      showPopup(
-        'Success! 🎉',
-        `Your bet has been published successfully!`,
-        'success',
-        { tokenNames, signatures },
-        () => router.back()
-      );
-
+  
     } catch (error) {
       console.error('Publish error:', error);
       showPopup(

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useContext, useRef } from "react";
 import { Text, TextInput, View, Button, ScrollView, Image, TouchableOpacity, Alert, Modal, ActivityIndicator, ImageBackground, SafeAreaView, Dimensions, Pressable, Animated, EmitterSubscription } from "react-native";
 import { useBets } from "../context/BetsContext";
-
+import { useWalletConnection } from '../hooks/useWalletConnection';
 import {
   usePrivy,
   useLinkWithOAuth,
@@ -315,6 +315,19 @@ const BetCard = ({ bet, userWallet, theme, onEndPosition, endingPosition, onPosi
 export const UserScreen = () => {
   // Remove signedMessages and signMessage logic
   const { logout, user } = usePrivy();
+
+  const { 
+    connected: mwaConnected, 
+    address: mwaAddress, 
+    publicKey: mwaPublicKey,
+    disconnectWallet,
+    executeTransaction 
+  } = useWalletConnection();
+  const confirmDisconnect = async () => {
+    // setShowDisconnectAlert(false);
+    await disconnectWallet();
+    router.push('/');
+  };
   const { linkWithPasskey } = useLinkWithPasskey();
   const oauth = useLinkWithOAuth();
   const { wallets, create } = useEmbeddedSolanaWallet();
@@ -360,6 +373,30 @@ export const UserScreen = () => {
   const modalSlideAnim = useRef(new Animated.Value(screenHeight)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
   
+
+  // Helper to get the active wallet (Privy or MWA)
+const getActiveWallet = useCallback(() => {
+  // Privy wallet takes priority if available
+  if (wallets && wallets.length > 0 && wallets[0].address) {
+    return {
+      address: wallets[0].address,
+      type: 'privy' as const,
+      provider: wallets[0]
+    };
+  }
+  
+  // Fall back to MWA wallet
+  if (mwaConnected && mwaAddress) {
+    return {
+      address: mwaAddress,
+      type: 'mwa' as const,
+      provider: null
+    };
+  }
+  
+  return null;
+}, [wallets, mwaConnected, mwaAddress]);
+
   // RetroPopup state
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupConfig, setPopupConfig] = useState({
@@ -407,18 +444,19 @@ export const UserScreen = () => {
 
   // Add a helper function to refresh balance
   const fetchBalance = useCallback(async () => {
-    if (!account?.address) return;
+    const activeWallet = getActiveWallet();
+    if (!activeWallet?.address) return;
     
     setLoadingBalance(true);
     try {
       // Fetch SOL balance
       const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
-      const balance = await connection.getBalance(new PublicKey(account.address));
+      const balance = await connection.getBalance(new PublicKey(activeWallet.address));
       setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
       
       // Fetch BONK balance using Jupiter Ultra API
       const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
-      const response = await fetch(`https://ultra-api.jup.ag/balances/${account.address}`);
+      const response = await fetch(`https://ultra-api.jup.ag/balances/${activeWallet.address}`);
       
       if (response.ok) {
         const balances = await response.json();
@@ -443,15 +481,16 @@ export const UserScreen = () => {
     } finally {
       setLoadingBalance(false);
     }
-  }, [account?.address]);
+  }, [getActiveWallet]);
 
   useEffect(() => {
-    console.log('Account address changed:', account?.address);
-    if (account?.address) {
-      console.log('Triggering balance fetch for address:', account.address);
+    const activeWallet = getActiveWallet();
+    console.log('Active wallet changed:', activeWallet?.address);
+    if (activeWallet?.address) {
+      console.log('Triggering balance fetch for address:', activeWallet.address);
       fetchBalance();
     }
-  }, [account?.address, fetchBalance]);
+  }, [getActiveWallet, fetchBalance]);
 
   useEffect(() => {
     // Fetch real-time SOL and BONK prices in USD
@@ -807,33 +846,65 @@ useEffect(() => {
   };
 
   // Fetch user's bets
-  const fetchUserBets = async () => {
-    if (!account?.address) return;
+// Replace your fetchUserBets function with this debug version:
+const fetchUserBets = async () => {
+  const activeWallet = getActiveWallet();
+  console.log('🔍 fetchUserBets called');
+  console.log('🔍 activeWallet:', activeWallet);
+  
+  if (!activeWallet) {
+    console.log('❌ No active wallet found');
+    return;
+  }
+  
+  setLoadingBets(true);
+  try {
+    console.log('📡 Fetching from API...');
+    const response = await fetch('https://apipoolc.vercel.app/api/read');
+    console.log('📡 API Response status:', response.status);
     
-    setLoadingBets(true);
-    try {
-      const response = await fetch('https://apipoolc.vercel.app/api/read');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          // Filter bets where user is a participant
-          const allBets = data.bets || [];
-          const participatedBets = allBets.filter((bet: any) => 
-            bet.participants?.some((p: any) => p.wallet === account.address)
-          );
-          setUserBets(participatedBets);
-        }
+    if (response.ok) {
+      const data = await response.json();
+      console.log('📡 API Response data:', data);
+      
+      if (data.success) {
+        const allBets = data.bets || [];
+        console.log('📊 Total bets from API:', allBets.length);
+        console.log('📊 All bets:', allBets);
+        
+        // Filter bets where user is a participant
+        const participatedBets = allBets.filter((bet: any) => {
+          console.log('🔍 Checking bet:', bet.id);
+          console.log('🔍 Bet participants:', bet.participants);
+          
+          const isParticipant = bet.participants?.some((p: any) => {
+            console.log('🔍 Comparing:', p.wallet, 'vs', activeWallet.address);
+            return p.wallet === activeWallet.address;
+          });
+          
+          console.log('🔍 Is participant:', isParticipant);
+          return isParticipant;
+        });
+        
+        console.log('✅ Participated bets found:', participatedBets.length);
+        console.log('✅ Participated bets:', participatedBets);
+        setUserBets(participatedBets);
+      } else {
+        console.log('❌ API returned success: false');
       }
-    } catch (error) {
-      console.error('Error fetching user bets:', error);
-    } finally {
-      setLoadingBets(false);
+    } else {
+      console.log('❌ API request failed:', response.status);
     }
-  };
+  } catch (error) {
+    console.error('❌ Error fetching user bets:', error);
+  } finally {
+    setLoadingBets(false);
+  }
+};
 
   useEffect(() => {
     fetchUserBets();
-  }, [account?.address]);
+  }, [account?.address , mwaAddress , wallets]);
 
   // Jupiter API functions for token swapping
   const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
@@ -949,21 +1020,15 @@ useEffect(() => {
 
   // End Position function - sell ALL tokens back to SOL
   const handleEndPosition = async (bet: any, participation: any) => {
-    if (!wallets || wallets.length === 0) {
+    const activeWallet = getActiveWallet();
+    
+    if (!activeWallet) {
       showPopup('Error', 'No wallet found. Please connect your wallet first.', 'error');
       return;
     }
-
-    const wallet = wallets[0];
-    const userWallet = wallet.address;
-
-    if (!userWallet) {
-      showPopup('Error', 'Unable to get wallet address.', 'error');
-      return;
-    }
-
+  
     setEndingPosition(bet.id);
-
+  
     try {
       // SOL mint address (wrapped SOL)
       const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -972,7 +1037,7 @@ useEffect(() => {
       console.log('Checking token account and balance...');
       
       // Get token balance from Jupiter Ultra API
-      const tokenBalance = await getTokenBalance(userWallet, tokenMint);
+      const tokenBalance = await getTokenBalance(activeWallet.address, tokenMint);
       
       console.log('Token balance from Jupiter Ultra API:', tokenBalance);
       
@@ -984,61 +1049,71 @@ useEffect(() => {
         );
         return;
       }
-
+  
       // Get token decimals from Jupiter Pools API
       const tokenDecimals = await getTokenDecimals(tokenMint);
       console.log('Token decimals:', tokenDecimals);
       
       // Convert token balance to the smallest unit using correct decimals
       const tokenAmount = Math.floor(tokenBalance * Math.pow(10, tokenDecimals));
-
+  
       console.log('Getting Jupiter quote for token to SOL...');
       
       // Get quote from Jupiter (Token → SOL)
       const quote = await getJupiterQuote(tokenMint, SOL_MINT, tokenAmount);
       
       console.log('Jupiter quote:', quote);
-
+  
       // Get swap transaction
-      const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
+      const swapTransaction = await getJupiterSwapTransaction(quote, activeWallet.address);
       
       console.log('Got swap transaction');
-
+  
       // Deserialize the transaction
       const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
       const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
-
+  
       console.log('Signing and sending transaction...');
-
-      // Sign and send transaction using Privy
-      const provider = await wallet.getProvider();
-      const { signature } = await provider.request({
-        method: 'signAndSendTransaction',
-        params: {
-          transaction: transaction,
-          connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
-        },
-      });
-
+  
+      let signature: string;
+  
+      if (activeWallet.type === 'privy' && activeWallet.provider) {
+        // Use Privy wallet
+        const provider = await activeWallet.provider.getProvider();
+        const result = await provider.request({
+          method: 'signAndSendTransaction',
+          params: {
+            transaction: transaction,
+            connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+          },
+        });
+        signature = result.signature;
+      } else if (activeWallet.type === 'mwa') {
+        // Use MWA wallet
+        signature = await executeTransaction(transaction);
+      } else {
+        throw new Error('No valid wallet provider available');
+      }
+  
       console.log('Transaction successful:', signature);
       setUserWithdrawnPositions(prev => new Set([...prev, bet.id]));
-
+  
       showPopup(
         'Position Closed! 🎉',
-        `Successfully sold ${tokenBalance.toFixed(4)} tokens for SOL!`,
+        `Successfully sold ${tokenBalance.toFixed(4)} tokens for SOL using ${activeWallet.type.toUpperCase()} wallet!`,
         'success',
         { signature, amount: `${tokenBalance.toFixed(4)} tokens` }
       );
-
+  
       // Refresh user bets and trigger token balance recheck
       await fetchUserBets();
       
       // Refresh user's SOL balance
       const refreshBalance = async () => {
-        if (!account?.address) return;
+        if (!activeWallet?.address) return;
         try {
           const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b');
-          const balance = await connection.getBalance(new PublicKey(account.address));
+          const balance = await connection.getBalance(new PublicKey(activeWallet.address));
           setSolBalance((balance / LAMPORTS_PER_SOL).toFixed(4));
         } catch (e) {
           console.error('Error refreshing balance:', e);
@@ -1050,12 +1125,10 @@ useEffect(() => {
       setTimeout(refreshBalance, 2000);
       
       // Trigger a recheck of token balances for all bet cards
-      // This will cause the BetCard components to re-check their token balances
       setTimeout(() => {
-        // Force re-render of bet cards to update token status
         setUserBets([...userBets]);
       }, 1000);
-
+  
     } catch (error) {
       console.error('End position error:', error);
       showPopup(
@@ -1189,9 +1262,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
   const twitterAccount = user?.linked_accounts?.find(a => a.type === 'twitter_oauth');
   const twitterPfp = twitterAccount?.profile_picture_url;
 
-  if (!user) {
-    return null;
-  }
+
 
   // --- PROFILE HEADER (NO GREEN BG, NAME+USERNAME BESIDE PFP) ---
   return (
@@ -1399,16 +1470,17 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             fontFamily: 'PressStart2P-Regular',
             letterSpacing: 0 
           }}>
-            {account?.address ? `${account.address.slice(0, 4)}...${account.address.slice(-4)}` : ''}
-          </Text>
+    {getActiveWallet()?.address ? `${getActiveWallet()!.address.slice(0, 4)}...${getActiveWallet()!.address.slice(-4)}` : ''}
+    </Text>
           <TouchableOpacity
-            onPress={async () => {
-              if (account?.address) {
-                await Clipboard.setStringAsync(account.address);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1200);
-              }
-            }}
+           onPress={async () => {
+            const activeWallet = getActiveWallet();
+            if (activeWallet?.address) {
+              await Clipboard.setStringAsync(activeWallet.address);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1200);
+            }
+          }}
             style={{ marginLeft: 6 }}
           >
             <MaterialIcons name={copied ? 'check' : 'content-copy'} size={20} color={copied ? '#4caf50' : theme.green} />
@@ -1418,32 +1490,58 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
         {/* QR code removed as requested */}
       </View>
       {/* Add Funds and Withdraw buttons */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18, marginBottom: 8, paddingHorizontal: 18 }}>
-        <RetroButton
-          title="ADD"
-          onPress={() => setShowAddFundsModal(true)}
-          backgroundColor="#4ed620" // Match the login button color
-          textColor="#000000"
-          fontSize={14}
-          letterSpacing={0}
-          fontWeight="normal"
-          minHeight={48}
-          minWidth={120}
-          textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-        />
-        <RetroButton
-          title="WITHDRAW"
-          onPress={() => setShowWithdrawModal(true)}
-          backgroundColor="#EF4444" // Red for withdraw
-          textColor="#FFFFFF"
-          fontSize={14}
-          letterSpacing={0}
-          fontWeight="normal"
-          minHeight={48}
-          minWidth={120}
-          textStyle={{ fontFamily: 'PressStart2P-Regular' }}
-        />
-      </View>
+{/* Add Funds and Withdraw buttons - Only show for Privy wallets */}
+{getActiveWallet()?.type === 'privy' && (
+  <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 18, marginBottom: 8, paddingHorizontal: 18 }}>
+    <RetroButton
+      title="ADD"
+      onPress={() => setShowAddFundsModal(true)}
+      backgroundColor="#4ed620"
+      textColor="#000000"
+      fontSize={14}
+      letterSpacing={0}
+      fontWeight="normal"
+      minHeight={48}
+      minWidth={120}
+      textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+    />
+    <RetroButton
+      title="WITHDRAW"
+      onPress={() => setShowWithdrawModal(true)}
+      backgroundColor="#EF4444"
+      textColor="#FFFFFF"
+      fontSize={14}
+      letterSpacing={0}
+      fontWeight="normal"
+      minHeight={48}
+      minWidth={120}
+      textStyle={{ fontFamily: 'PressStart2P-Regular' }}
+    />
+  </View>
+)}
+
+{/* Show MWA wallet info if using MWA */}
+{getActiveWallet()?.type === 'mwa' && (
+  <View style={{ backgroundColor: 'rgba(139, 92, 246, 0.1)', borderRadius: 12, marginHorizontal: 18, marginTop: 18, padding: 16, borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+    <Text style={{ 
+      fontSize: 12, 
+      fontFamily: 'PressStart2P-Regular',
+      color: theme.green, 
+      textAlign: 'center',
+      marginBottom: 4
+    }}>
+      🔗 MOBILE WALLET CONNECTED
+    </Text>
+    <Text style={{ 
+      fontSize: 10, 
+      fontFamily: 'PressStart2P-Regular',
+      color: theme.subtext, 
+      textAlign: 'center'
+    }}>
+      Use your mobile wallet app for transfers
+    </Text>
+  </View>
+)}
 
       {/* Deposit (Receive) Modal */}
       <Modal
@@ -1830,7 +1928,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
             />
             <RetroButton
               title="LOGOUT"
-              onPress={() => { closeSettingsModal(); logout(); }}
+              onPress={() => { closeSettingsModal(); logout(); confirmDisconnect(); }}
               backgroundColor={themeName === 'dark' ? '#333333' : '#ffffff'}
               textColor="#ff4444"
               fontSize={12}
@@ -1909,7 +2007,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
         <BetCard 
           key={bet.id} 
           bet={bet} 
-          userWallet={account?.address} 
+          userWallet={getActiveWallet()?.address} 
           theme={theme}
           onEndPosition={handleEndPosition}
           endingPosition={endingPosition}
@@ -1947,7 +2045,7 @@ const handlePhantomTransfer = useCallback(async (amount: string) => {
         <BetCard 
           key={bet.id} 
           bet={bet} 
-          userWallet={account?.address} 
+          userWallet={getActiveWallet()?.address} 
           theme={theme}
           onEndPosition={handleEndPosition}
           endingPosition={endingPosition}

@@ -10,6 +10,8 @@ import { RetroPopup } from '../components/RetroPopup';
 
 import { Connection, VersionedTransaction } from '@solana/web3.js';
 import { useEmbeddedSolanaWallet } from '@privy-io/expo';
+import { useWalletConnection } from '../hooks/useWalletConnection';
+import { transact } from '@solana-mobile/mobile-wallet-adapter-protocol-web3js';
 
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -227,6 +229,13 @@ export default function LiveBetsScreen() {
     const [betAmount, setBetAmount] = useState('0.1');
     const [isPlacingBet, setIsPlacingBet] = useState(false);
     const { wallets } = useEmbeddedSolanaWallet();
+    const { 
+      connected: mwaConnected, 
+      address: mwaAddress, 
+      authToken: mwaAuthToken,
+      executeTransaction // Add this new method
+    } = useWalletConnection();
+        // const [mwaAuthToken, setMwaAuthToken] = useState<string>('');
     const isExpired = bet.betType !== 'timeless' && new Date(bet.endTime || '') <= new Date();
     const [generatedImage, setGeneratedImage] = useState<string>('');
   
@@ -279,17 +288,38 @@ export default function LiveBetsScreen() {
 
     // Function to place a bet
   // Fixed placeBet function with proper error handling and amount calculations
+// Replace your existing placeBet function with this simplified version
 const placeBet = async () => {
-  if (selectedOption === null || !wallets || wallets.length === 0) {
-    showPopup('Error', 'Please select an option and ensure your wallet is connected', 'error');
+  if (selectedOption === null) {
+    showPopup('Error', 'Please select an option', 'error');
     return;
   }
 
-  const wallet = wallets[0];
-  const userWallet = wallet.address;
+  // Check both wallet types - Privy and MWA
+  let userWallet: string | null = null;
+  let walletProvider: any = null;
+  let walletType: 'privy' | 'mwa' | null = null;
+
+  // First check if Privy wallet is connected
+  if (wallets && wallets.length > 0) {
+    const privyWallet = wallets[0];
+    if (privyWallet.address) {
+      userWallet = privyWallet.address;
+      walletProvider = privyWallet;
+      walletType = 'privy';
+      console.log('Using Privy wallet:', userWallet);
+    }
+  }
+
+  // If no Privy wallet, check MWA wallet
+  if (!userWallet && mwaConnected && mwaAddress) {
+    userWallet = mwaAddress;
+    walletType = 'mwa';
+    console.log('Using MWA wallet:', userWallet);
+  }
 
   if (!userWallet) {
-    showPopup('Error', 'Unable to get wallet address.', 'error');
+    showPopup('Error', 'Please connect either a Privy wallet or MWA wallet to place a bet', 'error');
     return;
   }
 
@@ -298,7 +328,6 @@ const placeBet = async () => {
   try {
     const amount = parseFloat(betAmount);
     
-    // Validate amount
     if (isNaN(amount) || amount <= 0) {
       showPopup('Error', 'Please enter a valid amount', 'error');
       return;
@@ -306,46 +335,44 @@ const placeBet = async () => {
 
     // Handle different bet types
     if (bet.betType === 'bonk') {
-      // For BONK bets, we need to handle BONK token swaps
-      const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263'; // BONK token mint
+      // For BONK bets
+      const BONK_MINT = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263';
       const targetTokenMint = bet.tokenAddresses[selectedOption];
-      
-      // BONK has 5 decimals, so multiply by 10^5
-      const bonkAmountInSmallestUnit = Math.floor(amount * 100000);
+      const bonkAmountInSmallestUnit = Math.floor(amount * 100000); // BONK has 5 decimals
 
       console.log('Getting Jupiter quote for BONK to token...');
-      console.log('BONK amount in smallest unit:', bonkAmountInSmallestUnit);
       
-      // Get quote from Jupiter (BONK → Token) with higher slippage tolerance
       const quote = await getJupiterQuote(BONK_MINT, targetTokenMint, bonkAmountInSmallestUnit);
       
-      console.log('Jupiter quote for BONK:', quote);
-
-      // Check if the quote is reasonable
       if (!quote.outAmount || quote.outAmount === '0') {
         throw new Error('No liquidity available for this swap amount');
       }
 
-      // Get swap transaction with user's public key
       const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
-      
-      console.log('Got BONK swap transaction');
-
-      // Deserialize the transaction
       const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
       const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
 
-      console.log('Signing and sending BONK transaction...');
-
-      // Sign and send transaction using Privy
-      const provider = await wallet.getProvider();
-      const { signature } = await provider.request({
-        method: 'signAndSendTransaction',
-        params: {
-          transaction: transaction,
-          connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
-        },
-      });
+      let signature: string;
+      
+      if (walletType === 'privy' && walletProvider) {
+        // Use Privy wallet
+        const provider = await walletProvider.getProvider();
+        const result = await provider.request({
+          method: 'signAndSendTransaction',
+          params: {
+            transaction: transaction,
+            connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+          },
+        });
+        signature = result.signature || result.txHash || 'unknown';
+      } else if (walletType === 'mwa') {
+        // Use the new executeTransaction method from the hook
+        signature = await executeTransaction(transaction);
+        
+    
+      } else {
+        throw new Error('No valid wallet provider available');
+      }
 
       console.log('BONK transaction successful:', signature);
 
@@ -373,9 +400,8 @@ const placeBet = async () => {
         const updateData = await updateResponse.json();
         console.log('Bet updated in database:', updateData);
         
-        // Update local bet data and refresh
         if (updateData.success) {
-          fetchBets(); // Refresh all bets
+          fetchBets();
         }
       }
 
@@ -392,48 +418,45 @@ const placeBet = async () => {
       return;
     }
 
-    // For SOL bets (existing logic with improvements)
+    // For SOL bets (existing logic with mainnet fixes)
     const SOL_MINT = 'So11111111111111111111111111111111111111112';
     const targetTokenMint = bet.tokenAddresses[selectedOption];
-    
-    // SOL has 9 decimals, so multiply by 10^9
-    const solAmountInLamports = Math.floor(amount * 1000000000);
+    const solAmountInLamports = Math.floor(amount * 1000000000); // SOL has 9 decimals
 
-    console.log('Getting Jupiter quote...');
-    console.log('SOL amount in lamports:', solAmountInLamports);
+    console.log('Getting Jupiter quote for SOL...');
     
-    // Get quote from Jupiter with higher slippage tolerance
     const quote = await getJupiterQuote(SOL_MINT, targetTokenMint, solAmountInLamports);
     
-    console.log('Jupiter quote:', quote);
-
-    // Check if the quote is reasonable
     if (!quote.outAmount || quote.outAmount === '0') {
       throw new Error('No liquidity available for this swap amount');
     }
 
-    // Get swap transaction
     const swapTransaction = await getJupiterSwapTransaction(quote, userWallet);
-    
-    console.log('Got swap transaction');
-
-    // Deserialize the transaction
     const swapTransactionBuf = Buffer.from(swapTransaction.swapTransaction, 'base64');
     const transaction = VersionedTransaction.deserialize(new Uint8Array(swapTransactionBuf));
 
-    console.log('Signing and sending transaction...');
+    let signature: string;
+    
+    if (walletType === 'privy' && walletProvider) {
+      // Use Privy wallet
+      const provider = await walletProvider.getProvider();
+      const result = await provider.request({
+        method: 'signAndSendTransaction',
+        params: {
+          transaction: transaction,
+          connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
+        },
+      });
+      signature = result.signature || result.txHash || 'unknown';
+         } else if (walletType === 'mwa') {
+       // Use the new executeTransaction method from the hook
+       signature = await executeTransaction(transaction);
 
-    // Sign and send transaction using Privy
-    const provider = await wallet.getProvider();
-    const { signature } = await provider.request({
-      method: 'signAndSendTransaction',
-      params: {
-        transaction: transaction,
-        connection: new Connection('https://mainnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b'),
-      },
-    });
+    } else {
+      throw new Error('No valid wallet provider available');
+    }
 
-    console.log('Transaction successful:', signature);
+    console.log('SOL transaction successful:', signature);
 
     // Update bet in database
     const updateResponse = await fetch('https://apipoolc.vercel.app/api/update', {
@@ -459,9 +482,8 @@ const placeBet = async () => {
       const updateData = await updateResponse.json();
       console.log('Bet updated in database:', updateData);
       
-      // Update local bet data and refresh
       if (updateData.success) {
-        fetchBets(); // Refresh all bets
+        fetchBets();
       }
     }
 
@@ -479,7 +501,6 @@ const placeBet = async () => {
   } catch (error) {
     console.error('Bet placement error:', error);
     
-    // More specific error handling
     let errorMessage = 'Unknown error occurred';
     
     if (error instanceof Error) {
@@ -503,68 +524,65 @@ const placeBet = async () => {
     setIsPlacingBet(false);
   }
 };
-
-// Updated Jupiter quote function with better error handling and higher slippage
-const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
-  try {
-    // Use higher slippage tolerance (300 bps = 3%) for better success rate
-    const response = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=300`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get Jupiter quote: ${response.status} - ${errorText}`);
+  
+  // Fixed Jupiter quote function for mainnet
+  const getJupiterQuote = async (inputMint: string, outputMint: string, amount: number) => {
+    try {
+      // Use higher slippage tolerance (500 bps = 5%) for better success rate
+      const response = await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=500`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get Jupiter quote: ${response.status} - ${errorText}`);
+      }
+      
+      const quote = await response.json();
+      
+      if (!quote.outAmount || quote.outAmount === '0') {
+        throw new Error('No liquidity available for this token pair');
+      }
+      
+      return quote;
+    } catch (error) {
+      console.error('Jupiter quote error:', error);
+      throw error;
     }
-    
-    const quote = await response.json();
-    
-    // Validate the quote
-    if (!quote.outAmount || quote.outAmount === '0') {
-      throw new Error('No liquidity available for this token pair');
+  };
+  
+  // Fixed swap transaction function for mainnet
+  const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
+    try {
+      const response = await fetch('https://quote-api.jup.ag/v6/swap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          quoteResponse,
+          userPublicKey,
+          wrapAndUnwrapSol: true,
+          dynamicComputeUnitLimit: true,
+          prioritizationFeeLamports: 2000, // Higher priority fee for mainnet
+        }),
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get Jupiter swap transaction: ${response.status} - ${errorText}`);
+      }
+  
+      const swapData = await response.json();
+      
+      if (!swapData.swapTransaction) {
+        throw new Error('Invalid swap transaction data received');
+      }
+      
+      return swapData;
+    } catch (error) {
+      console.error('Jupiter swap transaction error:', error);
+      throw error;
     }
-    
-    return quote;
-  } catch (error) {
-    console.error('Jupiter quote error:', error);
-    throw error;
-  }
-};
-
-// Updated swap transaction function with better error handling
-const getJupiterSwapTransaction = async (quoteResponse: any, userPublicKey: string) => {
-  try {
-    const response = await fetch('https://quote-api.jup.ag/v6/swap', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        quoteResponse,
-        userPublicKey,
-        wrapAndUnwrapSol: true,
-        // Add these parameters for better transaction handling
-        dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: 1000, // Small priority fee
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get Jupiter swap transaction: ${response.status} - ${errorText}`);
-    }
-
-    const swapData = await response.json();
-    
-    // Validate the swap transaction data
-    if (!swapData.swapTransaction) {
-      throw new Error('Invalid swap transaction data received');
-    }
-    
-    return swapData;
-  } catch (error) {
-    console.error('Jupiter swap transaction error:', error);
-    throw error;
-  }
-};
+  };
     return (
       <View style={{
         height: screenHeight,

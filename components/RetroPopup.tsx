@@ -83,7 +83,10 @@ export const RetroPopup: React.FC<RetroPopupProps> = ({
   const formatSignature = (signature: string) => {
     if (!signature) return '';
     if (signature.length <= 12) return signature;
-    return `${signature.slice(0, 6)}...${signature.slice(-6)}`;
+// Instead of: signature.slice(...)
+// Use:
+const displaySignature = signature && typeof signature === 'string' ? signature.slice(0, 8) + '...' + signature.slice(-8) : 'sent on chain';
+    return displaySignature;
   };
 
   const renderData = () => {

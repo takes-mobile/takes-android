@@ -164,7 +164,7 @@ export default function CreateBetScreen() {
       // Use bonk.img for bonk buy type
       if (betType === 'bonk') {
         // Use a bonk image instead of pollinations
-        setGeneratedImage('https://bonkimg.com/bonk.png');
+        setGeneratedImage('https://image.pollinations.ai/prompt/${encodedPrompt}');
         return;
       }
       const encodedPrompt = encodeURIComponent(prompt);
